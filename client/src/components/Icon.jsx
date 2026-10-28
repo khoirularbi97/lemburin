@@ -18,6 +18,8 @@ const PATHS = {
   left: 'M15 6l-6 6 6 6',
   right: 'M9 6l6 6-6 6',
   print: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z',
+  menu: 'M4 7h16M4 12h16M4 17h16',
+  x: 'M6 6l12 12M18 6L6 18',
 };
 
 export default function Icon({ name, size, stroke = 'currentColor', width = 2.2, className }) {
