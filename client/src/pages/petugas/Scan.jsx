@@ -5,18 +5,10 @@ import { useAuth } from '../../auth.jsx';
 import Icon from '../../components/Icon.jsx';
 import { Avatar, Tile, useToast } from '../../components/ui.jsx';
 import { hariIniWIB, jamFmt, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
+import { useKamera } from './useKamera.js';
 
 const REGION = 'qr-region';
 const REGION_FILE = 'qr-file-region';
-
-function pesanKamera(err) {
-  const s = String(err?.name || err?.message || err);
-  if (/NotAllowed|Permission/i.test(s)) return 'Izin kamera ditolak. Buka pengaturan browser, izinkan kamera untuk situs ini, lalu muat ulang.';
-  if (/NotFound|Requested device not found/i.test(s)) return 'Kamera tidak ditemukan di perangkat ini.';
-  if (/NotReadable|Could not start/i.test(s)) return 'Kamera sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.';
-  if (/secure|https/i.test(s)) return 'Kamera hanya bisa dibuka lewat HTTPS.';
-  return 'Kamera tidak bisa dibuka. Gunakan tombol foto QR di bawah.';
-}
 
 function getar(pola) {
   try { navigator.vibrate?.(pola); } catch { /* tidak didukung */ }
@@ -87,10 +79,10 @@ function HasilScan({ hasil, onTutup }) {
 export default function Scan() {
   const { user } = useAuth();
   const toast = useToast();
-  const scannerRef = useRef(null);
   const sibukRef = useRef(false);
   const terakhirRef = useRef({ teks: '', t: 0 });
-  const [kamera, setKamera] = useState({ status: 'memulai', pesan: '' });
+  const decodeRef = useRef(null);
+  const kamera = useKamera(REGION, (teks) => decodeRef.current?.(teks));
   const [hari, setHari] = useState(null);
   const [riwayat, setRiwayat] = useState(null);
   const [hasil, setHasil] = useState(null);
@@ -119,10 +111,10 @@ export default function Scan() {
       } else {
         toast(err.message, true);
         sibukRef.current = false;
-        try { scannerRef.current?.resume(); } catch { /* belum jalan */ }
+        kamera.lanjut();
       }
     }
-  }, [muatRiwayat, toast]);
+  }, [muatRiwayat, toast, kamera.lanjut]);
 
   const onDecode = useCallback((teks) => {
     const now = Date.now();
@@ -131,33 +123,16 @@ export default function Scan() {
     if (teks === terakhirRef.current.teks && now - terakhirRef.current.t < 5000) return;
     terakhirRef.current = { teks, t: now };
     sibukRef.current = true;
-    try { scannerRef.current?.pause(true); } catch { /* abaikan */ }
+    kamera.tahan();
     kirimToken(teks.trim());
-  }, [kirimToken]);
-
-  useEffect(() => {
-    const scanner = new Html5Qrcode(REGION, { verbose: false });
-    scannerRef.current = scanner;
-    let aktif = true;
-    scanner.start(
-      { facingMode: 'environment' },
-      { fps: 10, qrbox: (w, h) => { const s = Math.floor(Math.min(w, h) * 0.7); return { width: s, height: s }; }, aspectRatio: 1 },
-      onDecode,
-      () => {},
-    ).then(() => { if (aktif) setKamera({ status: 'nyala', pesan: '' }); })
-      .catch((err) => { if (aktif) setKamera({ status: 'gagal', pesan: pesanKamera(err) }); });
-
-    return () => {
-      aktif = false;
-      if (scanner.isScanning) scanner.stop().then(() => scanner.clear()).catch(() => {});
-    };
-  }, [onDecode]);
+  }, [kirimToken, kamera.tahan]);
+  decodeRef.current = onDecode;
 
   const tutupHasil = useCallback(() => {
     setHasil(null);
     sibukRef.current = false;
-    try { scannerRef.current?.resume(); } catch { /* kamera tidak jalan */ }
-  }, []);
+    kamera.lanjut();
+  }, [kamera.lanjut]);
 
   async function scanFoto(e) {
     const file = e.target.files?.[0];
@@ -168,7 +143,7 @@ export default function Scan() {
     try {
       const teks = await fileScanner.scanFile(file, false);
       sibukRef.current = true;
-      try { scannerRef.current?.pause(true); } catch { /* abaikan */ }
+      kamera.tahan();
       await kirimToken(teks.trim());
     } catch {
       toast('QR tidak terbaca. Foto lebih dekat, terang, dan tidak miring.', true);
@@ -201,7 +176,13 @@ export default function Scan() {
         <div id={REGION} />
         {kamera.status !== 'nyala' && (
           <div className="vf-msg">
-            {kamera.status === 'memulai' ? <><span className="spin" />Membuka kamera…</> : <><Icon name="camera" size={32} />{kamera.pesan}</>}
+            {kamera.status === 'memulai' ? <><span className="spin" />Membuka kamera…</> : (
+              <>
+                <Icon name="camera" size={32} />
+                <span>{kamera.pesan}</span>
+                <button type="button" className="btn sm" onClick={kamera.cobaLagi}>Coba lagi</button>
+              </>
+            )}
           </div>
         )}
         <div className="vf-foot">
