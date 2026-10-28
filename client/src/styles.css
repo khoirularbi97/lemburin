@@ -136,7 +136,11 @@ h1, h2, h3 { text-wrap: balance; }
 
 /* ===== Panel admin ===== */
 .a-wrap { max-width: 1440px; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 48px max(16px, env(safe-area-inset-left)); display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
-.side { flex: 1 1 248px; max-width: 100%; border-radius: 26px; padding: 18px 12px; background: linear-gradient(180deg, var(--navy) 0%, var(--navy2) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 30px 50px -28px rgba(18,21,43,.9); display: flex; flex-direction: column; gap: 6px; position: sticky; top: calc(16px + env(safe-area-inset-top)); }
+.side { flex: 1 1 248px; max-width: 100%; border-radius: 26px; padding: 18px 12px; background: linear-gradient(180deg, var(--navy) 0%, var(--navy2) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 30px 50px -28px rgba(18,21,43,.9); display: flex; flex-direction: column; gap: 6px; position: sticky; top: calc(16px + env(safe-area-inset-top));
+  /* Sidebar setinggi layar (dikurangi jarak 16px atas-bawah), tetap menempel saat halaman di-scroll */
+  height: calc(100vh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto; }
 .sb-brand { display: flex; align-items: center; gap: 12px; padding: 4px 8px 16px; color: var(--white); font-size: 17px; font-weight: 800; }
 .nv { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 0 10px; border-radius: 14px; color: var(--navyMuted); font-size: 15px; font-weight: 600; text-decoration: none; }
 .nv:hover { color: var(--white); background: rgba(255,255,255,.06); }
@@ -144,14 +148,14 @@ h1, h2, h3 { text-wrap: balance; }
 .ni { width: 30px; height: 30px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.08); flex-shrink: 0; }
 .ni svg { width: 16px; height: 16px; stroke: var(--white); }
 .nv.active .ni { background: linear-gradient(145deg, #2CC9A8, var(--teal)); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 6px 12px -4px rgba(44,201,168,.6); }
-.me { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 16px; background: rgba(255,255,255,.06); margin-top: 18px; }
+.me { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 16px; background: rgba(255,255,255,.06); margin-top: auto; } /* auto: kartu akun terdorong ke dasar sidebar */
 .me div { display: flex; flex-direction: column; min-width: 0; }
 .me b { color: var(--white); font-size: 14px; }
 .me span { color: var(--navyMuted); font-size: 12px; }
 .me button { margin-left: auto; background: none; border: 0; color: var(--navyMuted); cursor: pointer; font-weight: 700; font-size: 13px; padding: 8px; }
 .me button:hover { color: var(--white); }
 @media (max-width: 760px) {
-  .side { position: static; flex-direction: row; flex-wrap: wrap; padding: 10px; }
+  .side { position: static; height: auto; overflow: visible; flex-direction: row; flex-wrap: wrap; padding: 10px; }
   .side .nv { flex: 1 1 140px; }
   .side .me { width: 100%; margin-top: 4px; }
   .sb-brand { display: none; }
