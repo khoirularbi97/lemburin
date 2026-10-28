@@ -1,0 +1,25 @@
+# Render Blueprint untuk backend lemburin.
+# Render > New > Blueprint > pilih repo ini. Isi env yang bertanda sync:false.
+services:
+  - type: web
+    name: lemburin-api
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: server
+    buildCommand: npm ci && npx prisma migrate deploy
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      - key: IZINKAN_WAKTU_SIMULASI
+        value: "false"

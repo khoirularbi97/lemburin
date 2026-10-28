@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#12152B" />
+    <meta name="description" content="Pencatatan dan perhitungan lembur karyawan dengan QR code" />
+
+    <!-- Favicon: SVG untuk browser modern, .ico untuk browser lama -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+
+    <!-- iPhone: ikon layar utama & splash saat aplikasi dibuka -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="lemburin" />
+    <link rel="apple-touch-startup-image" href="/splash/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/splash/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/splash/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/splash/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/splash/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/splash/splash-828x1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+    <link rel="apple-touch-startup-image" href="/splash/splash-750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" />
+    <title>lemburin</title>
+
+    <!-- Splash dalam aplikasi: tampil sebelum JavaScript selesai dimuat -->
+    <style>
+      #splash { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: radial-gradient(circle at 50% 38%, #2E3672 0, #12152B 55%, #0A0C1A 100%); color: #fff; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; transition: opacity .35s ease; }
+      #splash.hilang { opacity: 0; pointer-events: none; }
+      #splash img { width: 132px; height: 132px; filter: drop-shadow(0 22px 26px rgba(0,0,0,.45)); animation: splash-naik .7s cubic-bezier(.2,.8,.2,1) both; }
+      #splash b { font-size: 30px; font-weight: 800; letter-spacing: -.02em; }
+      #splash b span { color: #2CC9A8; }
+      #splash small { font-size: 14px; font-weight: 600; color: #C5CAE6; }
+      @keyframes splash-naik { from { opacity: 0; transform: translateY(14px) scale(.94); } to { opacity: 1; transform: none; } }
+      @media (prefers-reduced-motion: reduce) { #splash img { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <div id="splash" role="status" aria-label="Memuat lemburin">
+      <img src="/logo.svg" alt="" width="132" height="132" />
+      <b>lembur<span>in</span></b>
+      <small>Satu tap, lembur tercatat</small>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,104 @@
+// Skema database Lembur QR.
+// DATABASE_URL = connection string Neon yang "pooled" (ada -pooler di host)
+// DIRECT_URL   = connection string Neon yang "direct", dipakai Prisma untuk migrasi
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  PETUGAS
+}
+
+enum JenisHari {
+  KERJA
+  LIBUR
+}
+
+model User {
+  id           Int          @id @default(autoincrement())
+  username     String       @unique
+  passwordHash String
+  nama         String
+  role         Role         @default(PETUGAS)
+  area         String       @default("Semua")
+  aktif        Boolean      @default(true)
+  lastLogin    DateTime?
+  createdAt    DateTime     @default(now())
+  tapDicatat   Lembur[]
+  tapDitolak   TapDitolak[]
+}
+
+model Karyawan {
+  id              Int           @id @default(autoincrement())
+  nik             String        @unique
+  nama            String
+  departemen      String
+  jabatan         String        @default("Operator")
+  /// Upah pokok + tunjangan tetap per bulan, dalam rupiah
+  upahBulanan     Int
+  /// Token acak yang dicetak sebagai QR di ID card (bukan NIK)
+  qrToken         String        @unique
+  aktif           Boolean       @default(true)
+  perluCetakUlang Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  lembur          Lembur[]
+  tokenLama       QrTokenLama[]
+  tapDitolak      TapDitolak[]
+}
+
+/// Token QR yang sudah diganti. Disimpan supaya scanner bisa bilang "kartu lama".
+model QrTokenLama {
+  id         Int      @id @default(autoincrement())
+  token      String   @unique
+  karyawanId Int
+  karyawan   Karyawan @relation(fields: [karyawanId], references: [id], onDelete: Cascade)
+  diganti    DateTime @default(now())
+}
+
+model Lembur {
+  id         Int       @id @default(autoincrement())
+  karyawanId Int
+  karyawan   Karyawan  @relation(fields: [karyawanId], references: [id], onDelete: Cascade)
+  /// Tanggal kerja menurut zona waktu Asia/Jakarta
+  tanggal    DateTime  @db.Date
+  waktuTap   DateTime
+  jenisHari  JenisHari
+  jamHitung  Float
+  /// Disimpan per tap supaya kenaikan gaji tidak mengubah data lama
+  upahSejam  Int
+  nominal    Int
+  petugasId  Int
+  petugas    User      @relation(fields: [petugasId], references: [id])
+  createdAt  DateTime  @default(now())
+
+  /// Satu karyawan hanya boleh satu tap per hari
+  @@unique([karyawanId, tanggal])
+  @@index([tanggal])
+}
+
+model HariLibur {
+  tanggal    DateTime @id @db.Date
+  keterangan String
+}
+
+model TapDitolak {
+  id         Int       @id @default(autoincrement())
+  tanggal    DateTime  @db.Date
+  waktu      DateTime  @default(now())
+  karyawanId Int?
+  karyawan   Karyawan? @relation(fields: [karyawanId], references: [id], onDelete: SetNull)
+  alasan     String
+  petugasId  Int
+  petugas    User      @relation(fields: [petugasId], references: [id])
+
+  @@index([tanggal])
+}

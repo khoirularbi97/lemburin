@@ -1,0 +1,36 @@
+{
+  "name": "lembur-qr-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "API penghitung lembur berbasis QR code (Express + Prisma + PostgreSQL/Neon)",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "test": "node --test test/*.test.js",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "node prisma/seed.js",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "5.22.0",
+    "bcryptjs": "2.4.3",
+    "cors": "2.8.5",
+    "dotenv": "16.4.5",
+    "exceljs": "4.4.0",
+    "express": "4.21.2",
+    "express-rate-limit": "7.4.1",
+    "helmet": "8.0.0",
+    "jsonwebtoken": "9.0.2",
+    "prisma": "5.22.0",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "nodemon": "3.1.7"
+  }
+}

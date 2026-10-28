@@ -1,0 +1,64 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import { ZodError } from 'zod';
+import { Prisma } from '@prisma/client';
+import { wajibLogin, wajibPeran } from './middleware/auth.js';
+import authRoutes from './routes/auth.js';
+import scanRoutes from './routes/scan.js';
+import karyawanRoutes from './routes/karyawan.js';
+import liburRoutes from './routes/libur.js';
+import rekapRoutes from './routes/rekap.js';
+import dashboardRoutes from './routes/dashboard.js';
+import penggunaRoutes from './routes/pengguna.js';
+
+export function buatApp() {
+  const app = express();
+  app.set('trust proxy', 1); // Render berada di balik proxy
+
+  // CORS_ORIGIN: daftar domain frontend dipisah koma, mis. https://lembur-qr.vercel.app
+  const izin = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  app.use(cors({
+    origin(origin, cb) {
+      if (!origin || izin.includes(origin)) return cb(null, true);
+      return cb(new Error(`Origin ${origin} tidak diizinkan`));
+    },
+  }));
+  app.use(helmet());
+  app.use(express.json({ limit: '100kb' }));
+
+  // Dipakai cron ping & health check Render. Sengaja tidak menyentuh database
+  // supaya Neon tetap boleh "tidur" dan jatah compute hemat.
+  app.get('/health', (req, res) => res.json({ ok: true, waktu: new Date().toISOString() }));
+
+  app.use('/api/auth', authRoutes);
+  app.use('/api/scan', wajibLogin, scanRoutes);
+  app.use('/api/libur', wajibLogin, liburRoutes);
+  app.use('/api/karyawan', wajibLogin, wajibPeran('ADMIN'), karyawanRoutes);
+  app.use('/api/rekap', wajibLogin, wajibPeran('ADMIN'), rekapRoutes);
+  app.use('/api/dashboard', wajibLogin, wajibPeran('ADMIN'), dashboardRoutes);
+  app.use('/api/pengguna', wajibLogin, wajibPeran('ADMIN'), penggunaRoutes);
+
+  app.use((req, res) => res.status(404).json({ pesan: 'Alamat API tidak ditemukan.' }));
+
+  // eslint-disable-next-line no-unused-vars
+  app.use((err, req, res, next) => {
+    if (err instanceof ZodError) {
+      return res.status(400).json({ pesan: err.issues[0]?.message || 'Data tidak valid.', detail: err.issues });
+    }
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === 'P2002') {
+        const kolom = Array.isArray(err.meta?.target) ? err.meta.target.join(', ') : 'data';
+        return res.status(409).json({ pesan: `Sudah ada ${kolom} yang sama.` });
+      }
+      if (err.code === 'P2025') return res.status(404).json({ pesan: 'Data tidak ditemukan.' });
+    }
+    if (err.status) return res.status(err.status).json({ pesan: err.message, ...err.extra });
+    if (err.message?.startsWith('Origin ')) return res.status(403).json({ pesan: err.message });
+    console.error(err);
+    return res.status(500).json({ pesan: 'Terjadi kesalahan di server.' });
+  });
+
+  return app;
+}
