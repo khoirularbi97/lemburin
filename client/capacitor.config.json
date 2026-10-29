@@ -1,0 +1,22 @@
+{
+  "appId": "id.lemburin.app",
+  "appName": "lemburin",
+  "webDir": "dist",
+  "backgroundColor": "#12152B",
+  "android": {
+    "allowMixedContent": false
+  },
+  "ios": {
+    "contentInset": "never"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 600,
+      "launchAutoHide": true,
+      "launchFadeOutDuration": 250,
+      "backgroundColor": "#12152B",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    }
+  }
+}

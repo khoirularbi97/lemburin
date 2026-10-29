@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { AuthProvider } from './auth.jsx';
 import { ToastProvider } from './components/ui.jsx';
+import { PLATFORM, pasangTombolKembali } from './platform.js';
 import './styles.css';
 
 // StrictMode sengaja tidak dipakai: di mode development ia memasang komponen
@@ -26,4 +27,16 @@ requestAnimationFrame(() => {
     splash.classList.add('hilang');
     setTimeout(() => splash.remove(), 400);
   }, Math.max(0, 600 - (performance.now() - mulai)));
+});
+
+// Android: tombol Kembali menutup modal/hasil scan/menu dulu, baru pindah halaman
+document.documentElement.dataset.platform = PLATFORM;
+pasangTombolKembali(() => {
+  const hasil = document.querySelector('.result .btn');
+  if (hasil) { hasil.click(); return true; }
+  if (document.querySelector('.scrim, .side.buka')) {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    return true;
+  }
+  return false;
 });

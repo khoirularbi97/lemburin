@@ -1,0 +1,163 @@
+# Build aplikasi lemburin untuk Android, Windows, macOS, dan Linux.
+#
+# Jalan otomatis saat push tag versi (mis. v1.0.0) → hasilnya dilampirkan di
+# halaman Releases GitHub. Bisa juga dijalankan manual dari tab Actions →
+# "Build aplikasi" → Run workflow (hasil ada di bagian Artifacts).
+#
+# Pengaturan repo (Settings → Secrets and variables → Actions):
+#   Variable  LEMBURIN_API_URL           wajib, mis. https://lemburin-api.onrender.com
+#   Secret    ANDROID_KEYSTORE_BASE64    opsional, isi file .jks di-base64
+#   Secret    ANDROID_KEYSTORE_PASSWORD  opsional
+#   Secret    ANDROID_KEY_ALIAS          opsional
+#   Secret    ANDROID_KEY_PASSWORD       opsional
+# Tanpa keystore, yang dibuat APK debug (bisa langsung dipasang di HP untuk uji coba).
+
+name: Build aplikasi
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  VITE_API_URL: ${{ vars.LEMBURIN_API_URL }}
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+
+      - name: Cek alamat backend
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            echo "::error::Isi variable LEMBURIN_API_URL di Settings → Secrets and variables → Actions → Variables"
+            exit 1
+          fi
+
+      - name: Build web (mode native) dan sinkron ke Android
+        working-directory: client
+        run: |
+          npm ci
+          echo "VITE_API_URL=$VITE_API_URL" > .env.native
+          npm run build:native
+          npx cap sync android
+
+      - name: Versi dari tag
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "LEMBURIN_VERSION_NAME=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+          fi
+          echo "LEMBURIN_VERSION_CODE=${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Siapkan keystore (kalau ada)
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/lemburin.jks"
+            echo "LEMBURIN_KEYSTORE_FILE=$RUNNER_TEMP/lemburin.jks" >> $GITHUB_ENV
+          else
+            echo "Tanpa keystore: membuat APK debug"
+          fi
+
+      - name: Build APK
+        working-directory: client/android
+        env:
+          LEMBURIN_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          LEMBURIN_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          LEMBURIN_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          mkdir -p ../../keluaran
+          if [ -n "$LEMBURIN_KEYSTORE_FILE" ]; then
+            ./gradlew assembleRelease bundleRelease
+            cp app/build/outputs/apk/release/app-release.apk ../../keluaran/lemburin-android.apk
+            cp app/build/outputs/bundle/release/app-release.aab ../../keluaran/lemburin-android.aab
+          else
+            ./gradlew assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk ../../keluaran/lemburin-android-debug.apk
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lemburin-android
+          path: keluaran/*
+
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            desktop/package-lock.json
+
+      - name: Build web (mode native)
+        working-directory: client
+        shell: bash
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            echo "::error::Isi variable LEMBURIN_API_URL di Settings → Secrets and variables → Actions → Variables"
+            exit 1
+          fi
+          npm ci
+          echo "VITE_API_URL=$VITE_API_URL" > .env.native
+          npm run build:native
+
+      - name: Kemas aplikasi desktop
+        working-directory: desktop
+        shell: bash
+        env:
+          # Belum ada sertifikat code signing: build tanpa tanda tangan
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          npm ci
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+          fi
+          node scripts/salin-web.cjs
+          npx electron-builder --publish never
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lemburin-desktop-${{ runner.os }}
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.dmg
+            desktop/release/*.AppImage
+            desktop/release/*.deb
+
+  rilis:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: hasil
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: hasil/*
+          generate_release_notes: true

@@ -1,0 +1,49 @@
+{
+  "name": "lemburin-desktop",
+  "productName": "lemburin",
+  "version": "1.0.0",
+  "description": "lemburin untuk Windows, macOS, dan Linux",
+  "author": "lemburin",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "web": "npm --prefix ../client run build:native && node scripts/salin-web.cjs",
+    "start": "npm run web && electron .",
+    "dev": "cross-env LEMBURIN_DEV_URL=http://localhost:5173 electron .",
+    "dist": "npm run web && electron-builder",
+    "dist:win": "npm run web && electron-builder --win",
+    "dist:mac": "npm run web && electron-builder --mac",
+    "dist:linux": "npm run web && electron-builder --linux"
+  },
+  "devDependencies": {
+    "cross-env": "7.0.3",
+    "electron": "44.7.0",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "id.lemburin.app",
+    "productName": "lemburin",
+    "copyright": "lemburin",
+    "directories": { "output": "release", "buildResources": "build" },
+    "files": ["main.cjs", "app/**/*", "build/icon.png"],
+    "artifactName": "lemburin-${version}-${os}-${arch}.${ext}",
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }] },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "lemburin"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "category": "public.app-category.business",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Kamera dipakai untuk scan QR lembur di ID card karyawan."
+      }
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office",
+      "maintainer": "lemburin"
+    }
+  }
+}

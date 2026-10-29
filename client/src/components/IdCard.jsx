@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import { simpanFile } from '../platform.js';
 import Icon from './Icon.jsx';
 import { Modal } from './ui.jsx';
 
@@ -53,10 +54,8 @@ export default function IdCard({ karyawan: k, onClose, onSudahDicetak }) {
 
   async function unduh() {
     const c = await gambarKartu(k);
-    const a = document.createElement('a');
-    a.href = c.toDataURL('image/png');
-    a.download = `id-card-${k.nik}.png`;
-    a.click();
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    await simpanFile(blob, `id-card-${k.nik}.png`);
   }
 
   return (

@@ -17,8 +17,13 @@ export function buatApp() {
   app.set('trust proxy', 1); // Render berada di balik proxy
 
   // CORS_ORIGIN: daftar domain frontend dipisah koma, mis. https://lembur-qr.vercel.app
-  const izin = (process.env.CORS_ORIGIN || 'http://localhost:5173')
-    .split(',').map((s) => s.trim()).filter(Boolean);
+  // Aplikasi native selalu diizinkan: Android (Capacitor) = https://localhost,
+  // iOS (Capacitor) = capacitor://localhost, desktop (Electron) = app://lemburin.
+  // Login memakai token di header, bukan cookie, jadi origin ini aman dibuka.
+  const izin = [
+    ...(process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map((s) => s.trim()).filter(Boolean),
+    ...(process.env.IZINKAN_APLIKASI_NATIVE === 'false' ? [] : ['https://localhost', 'capacitor://localhost', 'app://lemburin']),
+  ];
   app.use(cors({
     origin(origin, cb) {
       if (!origin || izin.includes(origin)) return cb(null, true);

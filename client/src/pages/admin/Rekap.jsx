@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
+import { NATIVE_HP, simpanFile } from '../../platform.js';
 import { Avatar, Konfirmasi, Memuat, Modal, Stat, useToast } from '../../components/ui.jsx';
 import { angka, hariIniWIB, jamFmt, namaBulan, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
 
@@ -134,13 +135,8 @@ export default function Rekap() {
     try {
       const q = new URLSearchParams({ bulan, ...(dept ? { departemen: dept } : {}) });
       const res = await api(`/api/rekap/export?${q}`, { raw: true });
-      const url = URL.createObjectURL(await res.blob());
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `rekap-lembur-${bulan}.xlsx`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-      toast(`Rekap ${namaBulan(bulan)} diunduh`);
+      const ok = await simpanFile(await res.blob(), `rekap-lembur-${bulan}.xlsx`);
+      if (ok) toast(NATIVE_HP ? `Rekap ${namaBulan(bulan)} siap dibagikan` : `Rekap ${namaBulan(bulan)} diunduh`);
     } catch (e) {
       toast(e.message, true);
     } finally {

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Warna brand lemburin -->
+    <color name="colorPrimary">#12152B</color>
+    <color name="colorPrimaryDark">#12152B</color>
+    <color name="colorAccent">#2CC9A8</color>
+    <color name="lemburin_malam">#12152B</color>
+</resources>

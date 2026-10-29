@@ -7,8 +7,13 @@ sesuai PP No. 35 Tahun 2021.
 | Bagian | Teknologi | Deploy |
 |---|---|---|
 | Frontend (PWA) | React 18 + Vite + html5-qrcode | Vercel |
+| Aplikasi Android & iOS | Capacitor 8 (kode React yang sama) | APK / Play Store / App Store |
+| Aplikasi desktop | Electron 44 (kode React yang sama) | Installer Windows, macOS, Linux |
 | Backend (REST API) | Express 4 + Prisma 5 + JWT | Render |
 | Database | PostgreSQL | Neon |
+
+Satu kode React dipakai di semua platform. Web, Android, iOS, dan desktop
+memanggil backend Render yang sama, jadi data selalu sinkron.
 
 ## Aturan perhitungan
 
@@ -64,11 +69,21 @@ lembur-qr/
 │   │   ├── middleware/      JWT & peran
 │   │   └── routes/          auth, scan, karyawan, libur, rekap, dashboard, pengguna
 │   └── test/                Unit test aturan lembur
-└── client/                  React PWA
-    ├── vercel.json          Rewrite SPA untuk Vercel
-    └── src/
-        ├── pages/petugas/   Scan (kamera), Riwayat, Akun
-        └── pages/admin/     Dashboard, Rekap, Karyawan & ID card, Libur, Pengguna
+├── client/                  React (web PWA + sumber aplikasi native)
+│   ├── vercel.json          Rewrite SPA untuk Vercel
+│   ├── capacitor.config.json  Konfigurasi aplikasi Android/iOS
+│   ├── .env.native          Alamat backend untuk build Android/iOS/desktop
+│   ├── assets/              Sumber ikon & splash Android/iOS
+│   ├── android/             Proyek Android Studio (dibuat Capacitor)
+│   ├── ios/                 Proyek Xcode (dibuat Capacitor)
+│   └── src/
+│       ├── platform.js      Deteksi platform, simpan file, tombol Kembali Android
+│       ├── pages/petugas/   Scan (kamera), Riwayat, Akun
+│       └── pages/admin/     Dashboard, Rekap, Karyawan & ID card, Libur, Pengguna
+├── desktop/                 Aplikasi desktop (Electron)
+│   ├── main.cjs             Jendela, protokol app://lemburin, izin kamera
+│   └── build/icon.png       Ikon desktop (.ico/.icns dibuat otomatis)
+└── .github/workflows/aplikasi.yml   Build APK + installer desktop otomatis
 ```
 
 ## Menjalankan di komputer sendiri
@@ -172,10 +187,93 @@ berkala dari [cron-job.org](https://cron-job.org) atau UptimeRobot:
 jatah compute gratisnya hemat. Frontend juga memanggil `/health` saat dibuka
 dan menampilkan banner "Menyambungkan ke server…" kalau server baru bangun.
 
-## Pasang di HP sebagai aplikasi
+## Aplikasi Android, iOS, dan desktop
 
-Buka domain Vercel di Chrome Android, lalu menu ⋮ > **Tambahkan ke layar utama**
-(atau **Instal aplikasi**). Di iPhone: Safari > Bagikan > **Tambah ke Layar Utama**.
+Ada dua cara memasang lemburin sebagai aplikasi:
+
+1. **PWA (paling cepat, tanpa build).** Buka domain Vercel di Chrome Android, menu ⋮ >
+   **Instal aplikasi**. iPhone: Safari > Bagikan > **Tambah ke Layar Utama**.
+   Di laptop: Chrome/Edge > ikon instal di address bar.
+2. **Aplikasi native** (APK, installer .exe/.dmg/.AppImage) dari folder `client/android`,
+   `client/ios`, dan `desktop/`. Penjelasannya di bawah.
+
+### Yang berbeda di versi native
+
+- File aplikasi ada di dalam paket, jadi tampilan langsung terbuka tanpa menunggu Vercel.
+  Data tetap dari backend Render, jadi tetap butuh internet.
+- Android/iOS: **Ekspor Excel** dan **Unduh ID card** membuka lembar Bagikan
+  (simpan ke Files/Drive atau kirim lewat WhatsApp), karena WebView tidak bisa mengunduh langsung.
+- Android: tombol **Kembali** menutup popup/menu dulu, baru pindah halaman; di halaman awal keluar aplikasi.
+- Desktop: unduhan memakai dialog Simpan biasa; kamera laptop/webcam bisa dipakai untuk scan.
+- Backend otomatis menerima origin aplikasi native (`https://localhost`, `capacitor://localhost`,
+  `app://lemburin`). Matikan dengan `IZINKAN_APLIKASI_NATIVE=false` kalau hanya memakai web.
+
+### Cara termudah: build otomatis di GitHub
+
+1. Push repo ke GitHub.
+2. **Settings → Secrets and variables → Actions → Variables → New variable**:
+   `LEMBURIN_API_URL` = alamat backend Render, mis. `https://lemburin-api.onrender.com`.
+3. Buat tag versi lalu push:
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+4. Tunggu workflow **Build aplikasi** selesai (±10–15 menit). Hasilnya ada di halaman **Releases**:
+   `lemburin-android-debug.apk`, installer Windows `.exe`, macOS `.dmg` (arm64 & x64),
+   Linux `.AppImage` dan `.deb`.
+
+Workflow juga bisa dijalankan manual dari tab **Actions → Build aplikasi → Run workflow**;
+hasilnya ada di bagian *Artifacts* di halaman run tersebut.
+
+Catatan pemasangan:
+- **APK debug** bisa langsung dipasang di HP (izinkan "instal dari sumber tidak dikenal").
+  Untuk Play Store butuh APK/AAB rilis bertanda tangan: buat keystore sekali
+  (`keytool -genkey -v -keystore lemburin.jks -alias lemburin -keyalg RSA -keysize 2048 -validity 10000`),
+  lalu isi secret `ANDROID_KEYSTORE_BASE64` (`base64 -w0 lemburin.jks`), `ANDROID_KEYSTORE_PASSWORD`,
+  `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Simpan keystore baik-baik: kalau hilang, update aplikasi di Play Store tidak bisa dikirim.
+- **Windows**: installer belum bertanda tangan, jadi SmartScreen menampilkan peringatan.
+  Klik *More info → Run anyway*.
+- **macOS**: belum dinotarisasi Apple. Klik kanan aplikasi → *Open* → *Open* saat pertama kali.
+
+### Build sendiri di komputer
+
+Siapkan dulu alamat backend:
+
+```bash
+cd client
+cp .env.native.example .env.native   # lalu ganti VITE_API_URL dengan alamat Render
+npm install
+```
+
+**Android** (butuh Android Studio + JDK 21):
+
+```bash
+npm run android          # build web mode native, sync, lalu buka Android Studio
+```
+Di Android Studio: tombol ▶ untuk menjalankan di HP (aktifkan USB debugging),
+atau *Build → Build App Bundle(s) / APK(s)*.
+
+**iOS** (butuh Mac + Xcode, untuk App Store perlu akun Apple Developer):
+
+```bash
+npm run ios              # build, sync, lalu buka Xcode
+```
+
+**Desktop**:
+
+```bash
+cd desktop
+npm install
+npm start                # coba jalankan
+npm run dist             # buat installer untuk OS komputer ini, hasil di desktop/release/
+```
+
+Saat mengembangkan tampilan, jalankan `npm run dev` di `client`, lalu `npm run dev` di
+`desktop` supaya jendela Electron memakai Vite dev server (perubahan langsung terlihat).
+
+Ikon & splash Android/iOS dibuat dari `client/assets/` dengan `npm run ikon:native`.
+File sumbernya dibuat oleh `brand/buat-logo.py` (fungsi `build_native`).
+Setiap kali kode React berubah, jalankan lagi `npm run cap:sync` sebelum build Android/iOS.
 
 ## Endpoint API
 

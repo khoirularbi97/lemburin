@@ -136,9 +136,9 @@ def wordmark_left(x0, base, fs, warna, aksen=TEAL):
             f'<text x="{x0 + w1:.1f}" y="{base}" font-family="Plus Jakarta Sans" font-weight="800" font-size="{fs}" fill="{aksen}" letter-spacing="{ls:.2f}">{NAMA[1]}</text>')
 
 
-def splash(w, h):
+def splash(w, h, skala=0.30):
     """Splash screen: latar navy malam, logo miring di tengah, wordmark & tagline."""
-    s = min(w, h) * 0.30
+    s = min(w, h) * skala
     x, y = (w - s) / 2, h * 0.40 - s / 2
     fs = s * 0.30
     k = s / 512
@@ -199,6 +199,27 @@ def build_project(dst):
         p = f'{dst}/splash/splash-{w}x{h}.png'
         cairosvg.svg2png(bytestring=splash(w, h).encode(), write_to=p)
         Image.open(p).convert('RGB').save(p, optimize=True)
+
+
+def build_native(dst_assets, dst_desktop):
+    """Sumber ikon & splash Android/iOS (@capacitor/assets) dan ikon desktop (electron-builder)."""
+    os.makedirs(dst_assets, exist_ok=True)
+    os.makedirs(dst_desktop, exist_ok=True)
+    def png(svg, path, w, h=None):
+        cairosvg.svg2png(bytestring=svg.encode(), write_to=path, output_width=w, output_height=h or w)
+    # iOS: kotak penuh, sudut dibulatkan sistem
+    png(square_full(), f'{dst_assets}/icon-only.png', 1024)
+    # Android adaptive icon: latar gradasi + isi miring di zona aman (66% tengah)
+    latar = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">{defs("n")}'
+             f'<rect width="512" height="512" fill="url(#bgn)"/><rect width="512" height="512" fill="url(#glossn)"/></svg>')
+    png(latar, f'{dst_assets}/icon-background.png', 1024)
+    depan = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">{defs("p")}'
+             f'<g transform="translate(256 256) scale(.72) translate(-256 -256) rotate({MIRING} 256 256)">{mark("full", "p")}</g></svg>')
+    png(depan, f'{dst_assets}/icon-foreground.png', 1024)
+    for n in ('splash', 'splash-dark'):
+        png(splash(2732, 2732, 0.20), f'{dst_assets}/{n}.png', 2732)
+    # Desktop: ikon kotak membulat, isi miring (electron-builder membuat .ico/.icns sendiri)
+    png(tile('full', 'd', miring_isi=True), f'{dst_desktop}/icon.png', 1024)
 
 
 def build_brand(dst):
