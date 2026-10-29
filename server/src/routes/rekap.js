@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import ExcelJS from 'exceljs';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ah, HttpError, ringkasKaryawan } from '../lib/util.js';
 import {
-  dariTanggalDb, jamWIB, polaBulan, rentangBulan, upahSejam, waktuJakarta,
+  cekTanggalManual, dariTanggalDb, hitungLembur, jamWIB, keTanggalDb, polaBulan, rentangBulan,
+  upahSejam, waktuJakarta,
 } from '../lib/lembur.js';
 
 const router = Router();
@@ -33,6 +35,7 @@ async function hitungRekap(bulan, departemen) {
     r.taps.push({
       id: t.id, tanggal: dariTanggalDb(t.tanggal), jam: jamWIB(t.waktuTap), jenisHari: t.jenisHari,
       jamHitung: t.jamHitung, upahSejam: t.upahSejam, nominal: t.nominal, petugas: t.petugas.username,
+      manual: t.manual, alasan: t.alasan,
     });
   }
 
@@ -87,19 +90,74 @@ router.get('/export', ah(async (req, res) => {
   [4, 5, 9].forEach((i) => { ws.getColumn(i).numFmt = rp; });
 
   const wd = wb.addWorksheet('Detail tap');
-  wd.addRow(['Tanggal', 'Jam tap', 'Karyawan', 'NIK', 'Departemen', 'Jenis hari', 'Jam hitung', 'Upah sejam', 'Nominal', 'Petugas']).font = { bold: true };
+  wd.addRow(['Tanggal', 'Jam tap', 'Karyawan', 'NIK', 'Departemen', 'Jenis hari', 'Jam hitung', 'Upah sejam', 'Nominal', 'Sumber', 'Dicatat oleh', 'Alasan manual']).font = { bold: true };
   for (const r of rows) {
     for (const t of r.taps) {
-      wd.addRow([t.tanggal, t.jam, r.karyawan.nama, r.karyawan.nik, r.karyawan.departemen, t.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur', t.jamHitung, t.upahSejam, t.nominal, t.petugas]);
+      wd.addRow([t.tanggal, t.jam, r.karyawan.nama, r.karyawan.nik, r.karyawan.departemen, t.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur', t.jamHitung, t.upahSejam, t.nominal, t.manual ? 'Manual' : 'Scan QR', t.petugas, t.alasan || '']);
     }
   }
-  wd.columns.forEach((c, i) => { c.width = [12, 9, 24, 12, 18, 12, 11, 12, 12, 16][i]; });
+  wd.columns.forEach((c, i) => { c.width = [12, 9, 24, 12, 18, 12, 11, 12, 12, 10, 16, 36][i]; });
   [8, 9].forEach((i) => { wd.getColumn(i).numFmt = rp; });
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="rekap-lembur-${bulan}.xlsx"`);
   await wb.xlsx.write(res);
   res.end();
+}));
+
+// Tap manual oleh admin, untuk lembur yang lupa di-tap (mis. kemarin tanggal 20).
+// Hanya admin (router ini sudah dijaga wajibPeran('ADMIN')).
+const skemaManual = z.object({
+  karyawanId: z.coerce.number().int().positive(),
+  tanggal: z.string(),
+  jam: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Format jam harus HH:mm'),
+  alasan: z.string().trim().min(5, 'Alasan minimal 5 huruf').max(200),
+});
+
+router.post('/tap', ah(async (req, res) => {
+  const data = skemaManual.parse(req.body);
+  const cek = cekTanggalManual(data.tanggal);
+  if (!cek.ok) throw new HttpError(400, cek.pesan);
+
+  const karyawan = await prisma.karyawan.findUnique({ where: { id: data.karyawanId } });
+  if (!karyawan) throw new HttpError(404, 'Karyawan tidak ditemukan');
+  if (!karyawan.aktif) throw new HttpError(403, 'Karyawan nonaktif');
+
+  const sudah = await prisma.lembur.findUnique({
+    where: { karyawanId_tanggal: { karyawanId: karyawan.id, tanggal: keTanggalDb(data.tanggal) } },
+    include: { petugas: { select: { username: true } } },
+  });
+  if (sudah) {
+    throw new HttpError(409, `${karyawan.nama} sudah punya tap di tanggal itu (${jamWIB(sudah.waktuTap)} WIB, ${sudah.manual ? 'manual' : 'scan'} oleh ${sudah.petugas.username}).`, { kode: 'SUDAH_TAP' });
+  }
+
+  const h = await prisma.hariLibur.findUnique({ where: { tanggal: keTanggalDb(data.tanggal) } });
+  const libur = h ? new Map([[data.tanggal, h.keterangan]]) : new Map();
+  const hasil = hitungLembur({ upahBulanan: karyawan.upahBulanan, tanggal: data.tanggal, libur });
+
+  const tap = await prisma.lembur.create({
+    data: {
+      karyawanId: karyawan.id,
+      tanggal: keTanggalDb(data.tanggal),
+      waktuTap: new Date(`${data.tanggal}T${data.jam}:00+07:00`),
+      jenisHari: hasil.jenisHari,
+      jamHitung: hasil.jamHitung,
+      upahSejam: hasil.upahSejam,
+      nominal: hasil.nominal,
+      petugasId: req.user.id,
+      manual: true,
+      alasan: data.alasan,
+    },
+  });
+
+  res.status(201).json({
+    karyawan: ringkasKaryawan(karyawan),
+    label: hasil.label + (hasil.keterangan ? ` · ${hasil.keterangan}` : ''),
+    tap: {
+      id: tap.id, tanggal: data.tanggal, jam: data.jam, jenisHari: tap.jenisHari, jamHitung: tap.jamHitung,
+      upahSejam: tap.upahSejam, nominal: tap.nominal, manual: true, alasan: tap.alasan, petugas: req.user.username,
+    },
+  });
 }));
 
 // Koreksi: hapus tap yang keliru

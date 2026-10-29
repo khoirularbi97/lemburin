@@ -86,6 +86,20 @@ export function rentangBulan(bulan) {
   return { gte, lt };
 }
 
+/**
+ * Batas tanggal tap manual: tidak boleh di masa depan, dan paling lama
+ * mundur sampai tanggal 1 bulan lalu (supaya rekap yang sudah dibayar tidak berubah).
+ * @returns {{ok: true} | {ok: false, pesan: string}}
+ */
+export function cekTanggalManual(tanggal, hariIni = waktuJakarta().tanggal) {
+  if (!polaTanggal(tanggal)) return { ok: false, pesan: 'Format tanggal harus YYYY-MM-DD.' };
+  if (tanggal > hariIni) return { ok: false, pesan: 'Tanggal lembur tidak boleh di masa depan.' };
+  const [y, m] = hariIni.split('-').map(Number);
+  const awal = m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, '0')}-01`;
+  if (tanggal < awal) return { ok: false, pesan: `Tap manual hanya bisa untuk tanggal ${awal} sampai hari ini.` };
+  return { ok: true, awal };
+}
+
 export function polaBulan(bulan) {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(bulan);
 }

@@ -76,8 +76,13 @@ model Lembur {
   /// Disimpan per tap supaya kenaikan gaji tidak mengubah data lama
   upahSejam  Int
   nominal    Int
+  /// Untuk tap dari scan: petugas yang men-scan. Untuk tap manual: admin yang menambahkan
   petugasId  Int
   petugas    User      @relation(fields: [petugasId], references: [id])
+  /// true = ditambahkan admin karena tap terlewat (bukan dari scan QR)
+  manual     Boolean   @default(false)
+  /// Alasan tap manual, wajib diisi admin (misalnya nomor SPL)
+  alasan     String?
   createdAt  DateTime  @default(now())
 
   /// Satu karyawan hanya boleh satu tap per hari

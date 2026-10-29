@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  hitungLembur, jenisHari, rentangBulan, upahSejam, waktuJakarta,
+  cekTanggalManual, hitungLembur, jenisHari, rentangBulan, upahSejam, waktuJakarta,
 } from '../src/lib/lembur.js';
 
 const libur = new Map([['2026-12-25', 'Hari Raya Natal']]);
@@ -44,4 +44,19 @@ test('rentang bulan Desember melompat ke Januari', () => {
   const { gte, lt } = rentangBulan('2026-12');
   assert.equal(gte.toISOString().slice(0, 10), '2026-12-01');
   assert.equal(lt.toISOString().slice(0, 10), '2027-01-01');
+});
+
+test('tap manual: boleh bulan ini dan bulan lalu, tidak boleh masa depan', () => {
+  const hariIni = '2026-10-29';
+  assert.equal(cekTanggalManual('2026-10-20', hariIni).ok, true);
+  assert.equal(cekTanggalManual('2026-10-29', hariIni).ok, true);
+  assert.equal(cekTanggalManual('2026-09-01', hariIni).ok, true);
+  assert.equal(cekTanggalManual('2026-08-31', hariIni).ok, false);
+  assert.equal(cekTanggalManual('2026-10-30', hariIni).ok, false);
+  assert.equal(cekTanggalManual('2026-13-01', hariIni).ok, false);
+});
+
+test('tap manual di bulan Januari boleh mundur ke Desember tahun lalu', () => {
+  assert.equal(cekTanggalManual('2026-12-15', '2027-01-05').ok, true);
+  assert.equal(cekTanggalManual('2026-11-30', '2027-01-05').ok, false);
 });

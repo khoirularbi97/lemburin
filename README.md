@@ -22,6 +22,7 @@ sesuai PP No. 35 Tahun 2021.
 - Satu karyawan hanya bisa tap satu kali per tanggal (dijaga oleh unique constraint di database).
 - Tanggal selalu dihitung menurut WIB (Asia/Jakarta), bukan jam server.
 - Upah sejam disimpan di setiap tap, jadi kenaikan gaji tidak mengubah data lama.
+- Tap terlewat (misalnya lupa scan tanggal 20) hanya bisa ditambahkan **admin** lewat Rekap → *Tambah tap manual*. Aturannya: tanggal paling lama tanggal 1 bulan lalu dan tidak boleh di masa depan, alasan wajib diisi (misalnya nomor SPL), jenis hari dan jam hitung tetap otomatis, dan satu tap per hari tetap berlaku. Tap manual diberi label *Manual* di rekap dan di Excel (kolom Sumber, Dicatat oleh, Alasan manual).
 
 Semua aturan ada di `server/src/lib/lembur.js` dan diuji di `server/test/lembur.test.js`.
 
@@ -195,6 +196,7 @@ Semua endpoint selain `/health` dan `/api/auth/login` butuh header
 | POST | `/api/karyawan/:id/ganti-qr` | admin | Buat token QR baru |
 | GET | `/api/rekap?bulan=YYYY-MM&departemen=` | admin | Rekap bulanan |
 | GET | `/api/rekap/export?bulan=YYYY-MM` | admin | Unduh rekap .xlsx |
+| POST | `/api/rekap/tap` | admin | Tap manual untuk lembur yang lupa di-tap |
 | DELETE | `/api/rekap/tap/:id` | admin | Hapus tap yang keliru |
 | GET | `/api/dashboard` | admin | Ringkasan dashboard |
 | GET/POST/PATCH | `/api/pengguna`, `/api/pengguna/:id` | admin | Kelola akun |
