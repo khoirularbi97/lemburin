@@ -22,6 +22,13 @@ enum JenisHari {
   LIBUR
 }
 
+enum StatusPengajuan {
+  MENUNGGU
+  DISETUJUI
+  DITOLAK
+  DIBATALKAN
+}
+
 model User {
   id           Int          @id @default(autoincrement())
   username     String       @unique
@@ -34,6 +41,7 @@ model User {
   createdAt    DateTime     @default(now())
   tapDicatat   Lembur[]
   tapDitolak   TapDitolak[]
+  pengajuanDiproses PengajuanTap[] @relation("PengajuanDiproses")
 }
 
 model Karyawan {
@@ -48,11 +56,20 @@ model Karyawan {
   qrToken         String        @unique
   aktif           Boolean       @default(true)
   perluCetakUlang Boolean       @default(false)
+  /// Portal karyawan: login NIK + sandi. Kosong = portal belum diaktifkan admin
+  sandiHash       String?
+  /// true = sandi masih sandi awal dari admin, wajib diganti saat login
+  wajibGantiSandi Boolean       @default(true)
+  /// Token login yang dibuat sebelum waktu ini ditolak (setelah ganti/reset sandi)
+  sandiDiubah     DateTime?
+  loginTerakhir   DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   lembur          Lembur[]
   tokenLama       QrTokenLama[]
   tapDitolak      TapDitolak[]
+  pengajuan       PengajuanTap[]
+  langganan       LanggananPush[]
 }
 
 /// Token QR yang sudah diganti. Disimpan supaya scanner bisa bilang "kartu lama".
@@ -84,6 +101,8 @@ model Lembur {
   /// Alasan tap manual, wajib diisi admin (misalnya nomor SPL)
   alasan     String?
   createdAt  DateTime  @default(now())
+  /// Ada isinya kalau tap ini berasal dari pengajuan karyawan yang disetujui
+  pengajuan  PengajuanTap?
 
   /// Satu karyawan hanya boleh satu tap per hari
   @@unique([karyawanId, tanggal])
@@ -106,4 +125,44 @@ model TapDitolak {
   petugas    User      @relation(fields: [petugasId], references: [id])
 
   @@index([tanggal])
+}
+
+/// Karyawan melapor lembur yang lupa di-tap. Admin menyetujui → jadi tap manual.
+model PengajuanTap {
+  id             Int             @id @default(autoincrement())
+  karyawanId     Int
+  karyawan       Karyawan        @relation(fields: [karyawanId], references: [id], onDelete: Cascade)
+  tanggal        DateTime        @db.Date
+  /// Jam selesai lembur menurut karyawan, HH:mm WIB
+  jam            String
+  alasan         String
+  status         StatusPengajuan @default(MENUNGGU)
+  catatanAdmin   String?
+  diprosesOlehId Int?
+  diprosesOleh   User?           @relation("PengajuanDiproses", fields: [diprosesOlehId], references: [id], onDelete: SetNull)
+  diprosesPada   DateTime?
+  lemburId       Int?            @unique
+  lembur         Lembur?         @relation(fields: [lemburId], references: [id], onDelete: SetNull)
+  createdAt      DateTime        @default(now())
+
+  @@index([status])
+  @@index([karyawanId, tanggal])
+}
+
+/// Perangkat karyawan yang mau menerima notifikasi.
+/// WEB = Web Push (PWA/browser), FCM = aplikasi Android/iOS lewat Firebase.
+model LanggananPush {
+  id              Int       @id @default(autoincrement())
+  karyawanId      Int
+  karyawan        Karyawan  @relation(fields: [karyawanId], references: [id], onDelete: Cascade)
+  jenis           String
+  /// Endpoint Web Push atau token FCM
+  endpoint        String    @unique
+  p256dh          String?
+  auth            String?
+  perangkat       String?
+  createdAt       DateTime  @default(now())
+  terakhirDipakai DateTime?
+
+  @@index([karyawanId])
 }

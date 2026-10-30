@@ -4,6 +4,7 @@ import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { buatTokenQr } from '../src/lib/util.js';
+
 import { keTanggalDb, waktuJakarta } from '../src/lib/lembur.js';
 
 const prisma = new PrismaClient();
@@ -38,11 +39,16 @@ async function main() {
       ['SNL-0087', 'Siti Rahmawati', 'Painting Line 2', 'Operator', 5_200_000],
       ['SNL-0171', 'Yuni Kartika', 'Warehouse', 'Staff gudang', 4_900_000],
     ];
+    // Sandi awal portal contoh karyawan. Karyawan wajib menggantinya saat login pertama.
+    const sandiKaryawan = await bcrypt.hash(process.env.SEED_KARYAWAN_PASSWORD || 'karyawan123', 10);
     for (const [nik, nama, departemen, jabatan, upahBulanan] of karyawan) {
       await prisma.karyawan.upsert({
         where: { nik },
         update: {},
-        create: { nik, nama, departemen, jabatan, upahBulanan, qrToken: buatTokenQr() },
+        create: {
+          nik, nama, departemen, jabatan, upahBulanan, qrToken: buatTokenQr(),
+          sandiHash: sandiKaryawan, wajibGantiSandi: true,
+        },
       });
     }
   }
@@ -66,7 +72,7 @@ async function main() {
     });
   }
 
-  console.log('Seed selesai: 3 akun, contoh karyawan, dan hari libur tanggal tetap.');
+  console.log('Seed selesai: 3 akun, contoh karyawan (portal: NIK + sandi "karyawan123"), dan hari libur tanggal tetap.');
 }
 
 main()

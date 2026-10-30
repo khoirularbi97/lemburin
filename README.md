@@ -187,6 +187,49 @@ berkala dari [cron-job.org](https://cron-job.org) atau UptimeRobot:
 jatah compute gratisnya hemat. Frontend juga memanggil `/health` saat dibuka
 dan menampilkan banner "Menyambungkan ke server…" kalau server baru bangun.
 
+## Portal karyawan
+
+Karyawan bisa melihat lemburnya sendiri di alamat yang sama (web, PWA, Android, iOS, desktop).
+Di halaman masuk pilih tab **Karyawan**, lalu masuk dengan **NIK + sandi**.
+
+| Fitur | Keterangan |
+|---|---|
+| Beranda | Status tap hari ini, total upah lembur bulan ini, jumlah tap kerja/libur, pengajuan yang menunggu |
+| Riwayat | Semua tap per bulan (label *Manual* kalau ditambahkan HRD) |
+| Slip lembur PDF | Rincian bulanan A4, dibuat server (`GET /api/portal/slip?bulan=YYYY-MM`) |
+| Lapor tap terlewat | Karyawan mengajukan tanggal, jam, alasan → admin **Setujui** (otomatis jadi tap manual) atau **Tolak** (dengan catatan) di menu *Pengajuan tap* |
+| Kartu QR cadangan | QR yang sama dengan ID card, untuk saat kartu tertinggal |
+| Notifikasi | Saat lembur tercatat (scan/manual) dan saat pengajuan disetujui/ditolak |
+
+**Akun karyawan.** Admin membuka *Data karyawan* → **Aktifkan portal** / **Reset sandi portal**.
+Sandi awal 8 karakter tampil sekali (tombol *Salin untuk dikirim* untuk WhatsApp). Saat masuk pertama
+karyawan wajib membuat sandi sendiri (minimal 8 karakter, huruf + angka, tidak berisi NIK).
+Karyawan baru otomatis mendapat sandi awal saat ditambahkan. Reset sandi atau ganti sandi
+langsung mengeluarkan karyawan dari semua perangkat lain. Token karyawan dan token petugas/admin
+berbeda jenis, jadi karyawan tidak bisa membuka rute scan/rekap, dan sebaliknya.
+
+Seed contoh: semua contoh karyawan memakai sandi awal `karyawan123` (ubah lewat `SEED_KARYAWAN_PASSWORD`).
+
+### Mengaktifkan notifikasi
+
+1. **Web/PWA (Chrome, Edge, Firefox, Android; iPhone iOS 16.4+ setelah *Tambah ke Layar Utama*)**
+   ```bash
+   cd server
+   npm run vapid      # mencetak Public Key dan Private Key
+   ```
+   Isi `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, dan `VAPID_SUBJECT` (mis. `mailto:hrd@perusahaan.co.id`)
+   di Render. Karyawan lalu menekan **Aktifkan notifikasi** di Beranda atau Akun.
+2. **Aplikasi Android/iOS (opsional, lewat Firebase Cloud Messaging)**
+   - Buat project di Firebase, tambahkan aplikasi Android dengan package `id.lemburin.app`.
+   - Unduh `google-services.json` → simpan sebagai secret GitHub `GOOGLE_SERVICES_JSON`
+     (workflow otomatis memasangnya dan mengaktifkan `VITE_FCM=true`).
+     Untuk build sendiri: taruh di `client/android/app/` dan isi `VITE_FCM=true` di `client/.env.native`.
+   - Firebase → Project settings → Service accounts → *Generate new private key*,
+     lalu isi `FIREBASE_SERVICE_ACCOUNT` di Render (JSON-nya, atau `base64 -w0 file.json`).
+   - iOS: tambahkan `GoogleService-Info.plist` dan kunci APNs di Firebase.
+   Tanpa langkah ini aplikasi tetap jalan; tombol notifikasi saja yang disembunyikan.
+3. Desktop (Electron) belum mendukung notifikasi push.
+
 ## Aplikasi Android, iOS, dan desktop
 
 Ada dua cara memasang lemburin sebagai aplikasi:
@@ -296,6 +339,16 @@ Semua endpoint selain `/health` dan `/api/auth/login` butuh header
 | GET | `/api/rekap/export?bulan=YYYY-MM` | admin | Unduh rekap .xlsx |
 | POST | `/api/rekap/tap` | admin | Tap manual untuk lembur yang lupa di-tap |
 | DELETE | `/api/rekap/tap/:id` | admin | Hapus tap yang keliru |
+| POST | `/api/karyawan/:id/sandi-portal` | admin | Aktifkan/reset akun portal, mengembalikan sandi awal (sekali) |
+| GET | `/api/pengajuan?status=` | admin | Daftar pengajuan tap terlewat |
+| POST | `/api/pengajuan/:id/setujui` · `/tolak` | admin | Proses pengajuan |
+| POST | `/api/portal/login` | karyawan | Masuk dengan NIK + sandi |
+| POST | `/api/portal/ganti-sandi` | karyawan | Ganti sandi (wajib saat masih sandi awal) |
+| GET | `/api/portal/ringkasan?bulan=` | karyawan | Total, daftar tap, status hari ini |
+| GET | `/api/portal/slip?bulan=` | karyawan | Slip lembur PDF |
+| GET | `/api/portal/qr` | karyawan | Kartu QR cadangan |
+| GET/POST/DELETE | `/api/portal/pengajuan` | karyawan | Lapor & batalkan tap terlewat |
+| POST/DELETE | `/api/portal/push/langganan` | karyawan | Daftar/hapus perangkat notifikasi |
 | GET | `/api/dashboard` | admin | Ringkasan dashboard |
 | GET/POST/PATCH | `/api/pengguna`, `/api/pengguna/:id` | admin | Kelola akun |
 

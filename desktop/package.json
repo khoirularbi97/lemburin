@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "description": "lemburin untuk Windows, macOS, dan Linux",
   "author": "lemburin",
-  "homepage": "https://github.com/khoirularbi97/lemburin",
   "private": true,
   "main": "main.cjs",
   "scripts": {

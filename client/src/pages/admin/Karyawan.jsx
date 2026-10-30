@@ -2,8 +2,40 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api.js';
 import IdCard from '../../components/IdCard.jsx';
 import Icon from '../../components/Icon.jsx';
-import { Avatar, Konfirmasi, Memuat, Tile, useToast } from '../../components/ui.jsx';
+import { Avatar, Konfirmasi, Memuat, Modal, Tile, useToast } from '../../components/ui.jsx';
 import { angka } from '../../format.js';
+
+function waktuLogin(iso) {
+  return new Date(iso).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short' });
+}
+
+function StatusPortal({ k }) {
+  if (!k.portal.aktif) return <span className="badge b-mute">Belum aktif</span>;
+  if (k.portal.sandiAwal) return <span className="badge b-warn">Sandi awal</span>;
+  return <span className="badge b-ok" title={k.portal.loginTerakhir ? `Login terakhir ${waktuLogin(k.portal.loginTerakhir)}` : ''}>Aktif{k.portal.loginTerakhir ? ` · ${waktuLogin(k.portal.loginTerakhir)}` : ''}</span>;
+}
+
+/** Sandi awal hanya muncul sekali. Admin menyerahkannya ke karyawan. */
+function SandiAwal({ data, onClose }) {
+  const toast = useToast();
+  const teks = `Portal lemburin\nNIK: ${data.nik}\nSandi awal: ${data.sandiAwal}\nGanti sandi saat pertama masuk.\n${window.location.origin}`;
+  return (
+    <Modal judul={`Akun portal ${data.nama}`} onClose={onClose}>
+      <p>Berikan NIK dan sandi awal ini ke karyawan. Sandi hanya ditampilkan sekali, dan karyawan wajib menggantinya saat pertama masuk.</p>
+      <div className="glass kv">
+        <div><span>NIK</span><b className="num">{data.nik}</b></div>
+        <div><span>Alamat</span><b>{window.location.host}</b></div>
+      </div>
+      <div className="sandi-awal" aria-label="Sandi awal">{data.sandiAwal}</div>
+      <div className="acts">
+        <button type="button" className="btn key" onClick={async () => {
+          try { await navigator.clipboard.writeText(teks); toast('Disalin. Tempel ke WhatsApp karyawan.'); } catch { toast('Tidak bisa menyalin otomatis. Catat sandinya.', true); }
+        }}>Salin untuk dikirim</button>
+        <button type="button" className="btn" onClick={onClose} autoFocus>Selesai</button>
+      </div>
+    </Modal>
+  );
+}
 
 const KOSONG = { nama: '', nik: '', departemen: '', jabatan: 'Operator', upahBulanan: '' };
 
@@ -57,6 +89,8 @@ export default function Karyawan() {
   const [form, setForm] = useState(null); // null | 'baru' | objek karyawan
   const [kartu, setKartu] = useState(null);
   const [ganti, setGanti] = useState(null);
+  const [resetSandi, setResetSandi] = useState(null);
+  const [sandiBaru, setSandiBaru] = useState(null);
 
   const muat = useCallback(() => api('/api/karyawan').then(setList).catch((e) => toast(e.message, true)), [toast]);
   useEffect(() => {
@@ -73,6 +107,7 @@ export default function Karyawan() {
     if (form === 'baru') {
       const k = await api('/api/karyawan', { method: 'POST', body: data });
       toast(`${k.nama} ditambahkan. ID card siap dicetak.`);
+      setSandiBaru(k);
     } else {
       await api(`/api/karyawan/${form.id}`, { method: 'PUT', body: data });
       toast(`Data ${data.nama} disimpan`);
@@ -107,7 +142,7 @@ export default function Karyawan() {
         <div className="glass tablebox">
           <div className="scroll">
             <table>
-              <thead><tr><th>Karyawan</th><th>NIK</th><th>Departemen</th><th className="n">Upah sebulan</th><th className="n">Upah sejam</th><th>Status QR</th><th>Aksi</th></tr></thead>
+              <thead><tr><th>Karyawan</th><th>NIK</th><th>Departemen</th><th className="n">Upah sebulan</th><th className="n">Upah sejam</th><th>Status QR</th><th>Portal</th><th>Aksi</th></tr></thead>
               <tbody>
                 {tampil.length ? tampil.map((k) => (
                   <tr key={k.id}>
@@ -121,16 +156,18 @@ export default function Karyawan() {
                         : k.perluCetakUlang ? <span className="badge b-warn">QR diganti · cetak ulang</span>
                           : <span className="badge b-ok">Aktif</span>}
                     </td>
+                    <td><StatusPortal k={k} /></td>
                     <td>
                       <div className="rowacts">
                         <button type="button" className="link" onClick={() => setKartu(k)}>ID card</button>
                         <button type="button" className="link" onClick={() => setForm(k)}>Edit</button>
                         <button type="button" className="link" onClick={() => setGanti(k)}>Ganti QR</button>
+                        <button type="button" className="link" onClick={() => setResetSandi(k)}>{k.portal.aktif ? 'Reset sandi portal' : 'Aktifkan portal'}</button>
                         <button type="button" className={`link${k.aktif ? ' danger' : ''}`} onClick={() => aturAktif(k)}>{k.aktif ? 'Nonaktifkan' : 'Aktifkan'}</button>
                       </div>
                     </td>
                   </tr>
-                )) : <tr><td colSpan={7}><div className="empty">{list.length ? `Tidak ada karyawan yang cocok dengan "${cari}".` : 'Belum ada karyawan. Tambahkan karyawan pertama dengan tombol di atas.'}</div></td></tr>}
+                )) : <tr><td colSpan={8}><div className="empty">{list.length ? `Tidak ada karyawan yang cocok dengan "${cari}".` : 'Belum ada karyawan. Tambahkan karyawan pertama dengan tombol di atas.'}</div></td></tr>}
               </tbody>
             </table>
           </div>
@@ -139,7 +176,7 @@ export default function Karyawan() {
 
       <div className="glass note">
         <Tile icon="info" warna="t-indigo" size={40} />
-        <span><b>Ganti QR</b> membuat token baru. Kartu lama langsung ditolak saat discan, jadi pakai saat ID card hilang. Buka <b>ID card</b> untuk mencetak atau mengunduh kartu.</span>
+        <span><b>Ganti QR</b> membuat token baru. Kartu lama langsung ditolak saat discan, jadi pakai saat ID card hilang. Buka <b>ID card</b> untuk mencetak atau mengunduh kartu. <b>Portal</b> = akun karyawan untuk melihat lembur sendiri (login NIK + sandi). Pakai <b>Reset sandi portal</b> kalau karyawan lupa sandi.</span>
       </div>
 
       {kartu && (
@@ -156,6 +193,27 @@ export default function Karyawan() {
           }}
         />
       )}
+
+      {resetSandi && (
+        <Konfirmasi
+          judul={resetSandi.portal.aktif ? `Reset sandi portal ${resetSandi.nama}?` : `Aktifkan portal ${resetSandi.nama}?`}
+          isi={resetSandi.portal.aktif
+            ? 'Sandi lama langsung tidak berlaku dan karyawan keluar dari semua perangkat. Sandi awal baru akan ditampilkan sekali.'
+            : 'Sandi awal dibuat dan ditampilkan sekali. Karyawan masuk dengan NIK dan sandi itu, lalu wajib menggantinya.'}
+          labelOk={resetSandi.portal.aktif ? 'Reset sandi' : 'Buat sandi awal'}
+          onBatal={() => setResetSandi(null)}
+          onOk={async () => {
+            try {
+              const k = await api(`/api/karyawan/${resetSandi.id}/sandi-portal`, { method: 'POST' });
+              setResetSandi(null);
+              setSandiBaru(k);
+              muat();
+            } catch (e) { toast(e.message, true); }
+          }}
+        />
+      )}
+
+      {sandiBaru && <SandiAwal data={sandiBaru} onClose={() => setSandiBaru(null)} />}
 
       {ganti && (
         <Konfirmasi

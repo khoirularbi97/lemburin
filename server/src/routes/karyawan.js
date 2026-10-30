@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
-import { ah, buatTokenQr, HttpError } from '../lib/util.js';
+import bcrypt from 'bcryptjs';
+import { ah, buatSandiAwal, buatTokenQr, HttpError } from '../lib/util.js';
 import { upahSejam } from '../lib/lembur.js';
 
 const router = Router();
@@ -16,8 +17,19 @@ const skemaKaryawan = z.object({
   upahBulanan: z.coerce.number().int().min(1_000_000, 'Upah minimal Rp1.000.000'),
 });
 
-function bentuk(k) {
-  return { ...k, upahSejam: upahSejam(k.upahBulanan) };
+// sandiHash tidak pernah dikirim ke browser
+function bentuk({ sandiHash, sandiDiubah, ...k }) {
+  return {
+    ...k,
+    upahSejam: upahSejam(k.upahBulanan),
+    portal: { aktif: Boolean(sandiHash), sandiAwal: Boolean(sandiHash) && k.wajibGantiSandi, loginTerakhir: k.loginTerakhir },
+  };
+}
+
+/** Sandi awal portal: hanya ditampilkan sekali ke admin, yang disimpan hanya hash-nya. */
+async function dataSandiAwal() {
+  const sandi = buatSandiAwal();
+  return { sandi, data: { sandiHash: await bcrypt.hash(sandi, 10), wajibGantiSandi: true, sandiDiubah: new Date() } };
 }
 
 router.get('/departemen', (req, res) => res.json(DEPARTEMEN));
@@ -29,8 +41,9 @@ router.get('/', ah(async (req, res) => {
 
 router.post('/', ah(async (req, res) => {
   const data = skemaKaryawan.parse(req.body);
-  const k = await prisma.karyawan.create({ data: { ...data, qrToken: buatTokenQr() } });
-  res.status(201).json(bentuk(k));
+  const awal = await dataSandiAwal();
+  const k = await prisma.karyawan.create({ data: { ...data, ...awal.data, qrToken: buatTokenQr() } });
+  res.status(201).json({ ...bentuk(k), sandiAwal: awal.sandi });
 }));
 
 router.put('/:id', ah(async (req, res) => {
@@ -57,6 +70,14 @@ router.post('/:id/ganti-qr', ah(async (req, res) => {
     prisma.karyawan.update({ where: { id }, data: { qrToken: buatTokenQr(), perluCetakUlang: true } }),
   ]);
   res.json(bentuk(k));
+}));
+
+// Aktifkan / reset akun portal karyawan (lupa sandi). Semua sesi login lamanya berakhir.
+router.post('/:id/sandi-portal', ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const awal = await dataSandiAwal();
+  const k = await prisma.karyawan.update({ where: { id }, data: awal.data });
+  res.json({ ...bentuk(k), sandiAwal: awal.sandi });
 }));
 
 router.post('/:id/sudah-dicetak', ah(async (req, res) => {

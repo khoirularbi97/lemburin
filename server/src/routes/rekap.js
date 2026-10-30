@@ -4,9 +4,10 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ah, HttpError, ringkasKaryawan } from '../lib/util.js';
 import {
-  cekTanggalManual, dariTanggalDb, hitungLembur, jamWIB, keTanggalDb, polaBulan, rentangBulan,
-  upahSejam, waktuJakarta,
+  dariTanggalDb, jamWIB, polaBulan, rentangBulan, upahSejam, waktuJakarta,
 } from '../lib/lembur.js';
+import { buatTapManual, wajibTanggalManual } from '../lib/tapManual.js';
+import { kabariTapTercatat } from '../lib/notifikasi.js';
 
 const router = Router();
 
@@ -116,39 +117,12 @@ const skemaManual = z.object({
 
 router.post('/tap', ah(async (req, res) => {
   const data = skemaManual.parse(req.body);
-  const cek = cekTanggalManual(data.tanggal);
-  if (!cek.ok) throw new HttpError(400, cek.pesan);
-
+  wajibTanggalManual(data.tanggal);
   const karyawan = await prisma.karyawan.findUnique({ where: { id: data.karyawanId } });
   if (!karyawan) throw new HttpError(404, 'Karyawan tidak ditemukan');
-  if (!karyawan.aktif) throw new HttpError(403, 'Karyawan nonaktif');
 
-  const sudah = await prisma.lembur.findUnique({
-    where: { karyawanId_tanggal: { karyawanId: karyawan.id, tanggal: keTanggalDb(data.tanggal) } },
-    include: { petugas: { select: { username: true } } },
-  });
-  if (sudah) {
-    throw new HttpError(409, `${karyawan.nama} sudah punya tap di tanggal itu (${jamWIB(sudah.waktuTap)} WIB, ${sudah.manual ? 'manual' : 'scan'} oleh ${sudah.petugas.username}).`, { kode: 'SUDAH_TAP' });
-  }
-
-  const h = await prisma.hariLibur.findUnique({ where: { tanggal: keTanggalDb(data.tanggal) } });
-  const libur = h ? new Map([[data.tanggal, h.keterangan]]) : new Map();
-  const hasil = hitungLembur({ upahBulanan: karyawan.upahBulanan, tanggal: data.tanggal, libur });
-
-  const tap = await prisma.lembur.create({
-    data: {
-      karyawanId: karyawan.id,
-      tanggal: keTanggalDb(data.tanggal),
-      waktuTap: new Date(`${data.tanggal}T${data.jam}:00+07:00`),
-      jenisHari: hasil.jenisHari,
-      jamHitung: hasil.jamHitung,
-      upahSejam: hasil.upahSejam,
-      nominal: hasil.nominal,
-      petugasId: req.user.id,
-      manual: true,
-      alasan: data.alasan,
-    },
-  });
+  const { tap, hasil } = await buatTapManual(prisma, { karyawan, tanggal: data.tanggal, jam: data.jam, alasan: data.alasan, adminId: req.user.id });
+  kabariTapTercatat(karyawan, tap, { manual: true });
 
   res.status(201).json({
     karyawan: ringkasKaryawan(karyawan),

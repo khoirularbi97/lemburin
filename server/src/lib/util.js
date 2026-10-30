@@ -12,6 +12,23 @@ export function buatSandiSementara() {
   return crypto.randomBytes(5).toString('base64url');
 }
 
+/** Sandi awal portal karyawan: 8 karakter tanpa huruf/angka yang mirip (0/O, 1/I/L). */
+export function buatSandiAwal() {
+  const abjad = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const b = crypto.randomBytes(8);
+  return Array.from(b, (x) => abjad[x % abjad.length]).join('');
+}
+
+/** Aturan sandi buatan karyawan sendiri. Mengembalikan pesan error atau null. */
+export function cekSandiBaru(sandi, { nik, lama } = {}) {
+  if (typeof sandi !== 'string' || sandi.length < 8) return 'Sandi baru minimal 8 karakter.';
+  if (sandi.length > 72) return 'Sandi baru maksimal 72 karakter.';
+  if (!/[A-Za-z]/.test(sandi) || !/\d/.test(sandi)) return 'Sandi baru harus berisi huruf dan angka.';
+  if (nik && sandi.toUpperCase().includes(nik.toUpperCase())) return 'Sandi tidak boleh berisi NIK.';
+  if (lama && sandi === lama) return 'Sandi baru harus berbeda dari sandi lama.';
+  return null;
+}
+
 export class HttpError extends Error {
   constructor(status, pesan, extra = {}) {
     super(pesan);

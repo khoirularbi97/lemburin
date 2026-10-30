@@ -268,3 +268,37 @@ tfoot td { font-weight: 800; background: rgba(213,243,236,.6); border-bottom: 0;
   .print-area .idcard { transform: none; box-shadow: none; border: 1px solid #ccc; width: 85.6mm; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---------- Portal karyawan ---------- */
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 16px; background: #E6E9F3; box-shadow: inset 0 2px 5px rgba(28,36,92,.1); }
+.seg button { min-height: 42px; border: 0; border-radius: 12px; background: none; color: var(--muted); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.seg button.on { color: var(--ink); background: var(--white); box-shadow: 0 1px 0 var(--white) inset, 0 3px 0 #CDD2E3, 0 8px 14px -8px rgba(28,36,92,.45); }
+.tabs.t4 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.tabs.t4 a { flex-direction: column; gap: 3px; min-height: 56px; font-size: 11.5px; }
+.tabs a { position: relative; }
+.tabs .nbadge { position: absolute; top: 4px; right: calc(50% - 22px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--rose); color: var(--white); font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.hero { border-radius: 24px; padding: 18px; display: flex; flex-direction: column; gap: 6px; }
+.hero .lbl { font-size: 13px; font-weight: 600; color: var(--navyMuted); }
+.hero .big { font-size: 34px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+.hero .sub { font-size: 13px; color: var(--navyMuted); }
+.mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mini > div { border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
+.mini span { font-size: 12px; font-weight: 600; color: var(--muted); }
+.mini b { font-size: 20px; font-weight: 800; }
+.today { border-radius: 20px; padding: 14px; display: flex; align-items: center; gap: 12px; }
+.today .t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.today .t b { font-size: 15px; }
+.today .t span { font-size: 13px; color: var(--muted); }
+.acts2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.acts2 .btn { min-width: 0; white-space: normal; text-align: center; line-height: 1.2; }
+.sandi-awal { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 30px; font-weight: 800; letter-spacing: .12em; text-align: center; padding: 16px; border-radius: 18px; background: #F1F3FA; border: 2px dashed var(--field); user-select: all; }
+.pj { border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.pj-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.pj-h b { font-size: 15px; }
+.pj p { margin: 0; font-size: 14px; }
+.pj .meta { font-size: 12px; color: var(--muted); }
+.qr-cadangan { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px; border-radius: 22px; background: var(--white); border: 1px solid var(--line); }
+.qr-cadangan img { width: min(260px, 70vw); height: auto; image-rendering: pixelated; }
+.nbadge-side { margin-left: auto; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--rose); color: var(--white); font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+/* Toast di atas tab bawah aplikasi petugas & portal */
+body:has(.tabs) .toast { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }

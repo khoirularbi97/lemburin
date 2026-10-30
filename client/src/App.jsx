@@ -16,6 +16,14 @@ const Rekap = lazy(() => import('./pages/admin/Rekap.jsx'));
 const Karyawan = lazy(() => import('./pages/admin/Karyawan.jsx'));
 const Libur = lazy(() => import('./pages/admin/Libur.jsx'));
 const Pengguna = lazy(() => import('./pages/admin/Pengguna.jsx'));
+const PengajuanAdmin = lazy(() => import('./pages/admin/Pengajuan.jsx'));
+// Portal karyawan
+const PortalLayout = lazy(() => import('./pages/portal/PortalLayout.jsx'));
+const Beranda = lazy(() => import('./pages/portal/Beranda.jsx'));
+const RiwayatPortal = lazy(() => import('./pages/portal/Riwayat.jsx'));
+const PengajuanPortal = lazy(() => import('./pages/portal/Pengajuan.jsx'));
+const AkunPortal = lazy(() => import('./pages/portal/Akun.jsx'));
+const GantiSandi = lazy(() => import('./pages/portal/GantiSandi.jsx'));
 
 function Wajib({ peran, children }) {
   const { user } = useAuth();
@@ -58,6 +66,14 @@ export default function App() {
           <Route path="karyawan" element={<Karyawan />} />
           <Route path="libur" element={<Libur />} />
           <Route path="pengguna" element={<Pengguna />} />
+          <Route path="pengajuan" element={<PengajuanAdmin />} />
+        </Route>
+        <Route path="/portal/sandi" element={<Wajib peran={['KARYAWAN']}><GantiSandi /></Wajib>} />
+        <Route path="/portal" element={<Wajib peran={['KARYAWAN']}><PortalLayout /></Wajib>}>
+          <Route index element={<Beranda />} />
+          <Route path="riwayat" element={<RiwayatPortal />} />
+          <Route path="pengajuan" element={<PengajuanPortal />} />
+          <Route path="akun" element={<AkunPortal />} />
         </Route>
         <Route path="*" element={<Navigate to={user ? halamanAwal(user) : '/login'} replace />} />
       </Routes>

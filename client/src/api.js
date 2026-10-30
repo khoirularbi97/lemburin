@@ -45,7 +45,7 @@ export async function api(path, { method = 'GET', body, raw = false } = {}) {
     throw new ApiError('Tidak bisa terhubung ke server. Periksa koneksi internet lalu coba lagi.', 0, null);
   }
 
-  if (res.status === 401 && path !== '/api/auth/login') {
+  if (res.status === 401 && !path.endsWith('/login')) {
     hapusSesi();
     window.dispatchEvent(new Event('lq:logout'));
   }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import Icon from '../../components/Icon.jsx';
 import { Avatar } from '../../components/ui.jsx';
@@ -7,6 +8,7 @@ import { Avatar } from '../../components/ui.jsx';
 const MENU = [
   ['/admin', 'Dashboard', 'grid', true],
   ['/admin/rekap', 'Rekap lembur', 'chart'],
+  ['/admin/pengajuan', 'Pengajuan tap', 'clock'],
   ['/admin/karyawan', 'Data karyawan & ID card', 'users'],
   ['/admin/libur', 'Kalender hari libur', 'cal'],
   ['/admin/pengguna', 'Pengguna & petugas', 'shield'],
@@ -19,7 +21,17 @@ export default function AdminLayout() {
   // Hanya dipakai di layar HP: menu tampil sebagai dropdown dari navbar atas
   const [buka, setBuka] = useState(false);
 
+  const [menunggu, setMenunggu] = useState(0);
+
   useEffect(() => { setBuka(false); }, [pathname]);
+
+  // Jumlah pengajuan karyawan yang belum diproses, untuk badge di menu
+  useEffect(() => {
+    const muat = () => api('/api/pengajuan/jumlah').then((r) => setMenunggu(r.menunggu)).catch(() => {});
+    muat();
+    window.addEventListener('lq:pengajuan', muat);
+    return () => window.removeEventListener('lq:pengajuan', muat);
+  }, [pathname]);
 
   useEffect(() => {
     if (!buka) return undefined;
@@ -47,7 +59,7 @@ export default function AdminLayout() {
             aria-label={buka ? 'Tutup menu' : `Buka menu, halaman ${halaman}`}
             onClick={() => setBuka((b) => !b)}
           >
-            <span className="sb-current">{halaman}</span>
+            <span className="sb-current">{halaman}{menunggu > 0 && <span className="nbadge-side" style={{ marginLeft: 8 }}>{menunggu}</span>}</span>
             <Icon name={buka ? 'x' : 'menu'} size={20} />
           </button>
         </div>
@@ -55,6 +67,7 @@ export default function AdminLayout() {
           {MENU.map(([to, label, icon, end]) => (
             <NavLink key={to} to={to} end={end} className="nv">
               <span className="ni"><Icon name={icon} /></span>{label}
+              {to === '/admin/pengajuan' && menunggu > 0 && <span className="nbadge-side" aria-label={`${menunggu} menunggu`}>{menunggu}</span>}
             </NavLink>
           ))}
           <div className="me">

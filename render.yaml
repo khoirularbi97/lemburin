@@ -23,3 +23,17 @@ services:
         value: 12h
       - key: IZINKAN_WAKTU_SIMULASI
         value: "false"
+      - key: JWT_KARYAWAN_EXPIRES_IN
+        value: 30d
+      - key: NAMA_PERUSAHAAN
+        sync: false
+      # Notifikasi Web Push. Buat dengan: cd server && npm run vapid
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
+      # Opsional: notifikasi aplikasi Android/iOS (Firebase)
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false

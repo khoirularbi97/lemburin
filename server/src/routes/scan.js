@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { kabariTapTercatat } from '../lib/notifikasi.js';
 import { ah, ringkasKaryawan } from '../lib/util.js';
 import {
   dariTanggalDb, hitungLembur, jamWIB, jenisHari, keTanggalDb, waktuJakarta,
@@ -112,6 +113,7 @@ router.post('/', ah(async (req, res) => {
         petugasId,
       },
     });
+    kabariTapTercatat(karyawan, tap); // notifikasi ke HP karyawan, tidak ditunggu
     return res.status(201).json({
       status: 'OK',
       karyawan: ringkasKaryawan(karyawan),

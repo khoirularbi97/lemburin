@@ -10,6 +10,8 @@
 #   Secret    ANDROID_KEYSTORE_PASSWORD  opsional
 #   Secret    ANDROID_KEY_ALIAS          opsional
 #   Secret    ANDROID_KEY_PASSWORD       opsional
+#   Secret    GOOGLE_SERVICES_JSON       opsional, isi google-services.json dari Firebase
+#                                        (mengaktifkan notifikasi di aplikasi Android)
 # Tanpa keystore, yang dibuat APK debug (bisa langsung dipasang di HP untuk uji coba).
 #
 # Semua action memakai versi yang berjalan di Node.js 24. Runner Linux dikunci ke
@@ -51,11 +53,23 @@ jobs:
             exit 1
           fi
 
+      - name: Firebase untuk notifikasi (kalau ada)
+        env:
+          GS: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GS" ]; then
+            echo "$GS" > client/android/app/google-services.json
+            echo "VITE_FCM=true" >> $GITHUB_ENV
+          else
+            echo "Tanpa google-services.json: notifikasi aplikasi Android dimatikan (portal tetap jalan)"
+          fi
+
       - name: Build web (mode native) dan sinkron ke Android
         working-directory: client
         run: |
           npm ci
           echo "VITE_API_URL=$VITE_API_URL" > .env.native
+          if [ "$VITE_FCM" = "true" ]; then echo "VITE_FCM=true" >> .env.native; fi
           npm run build:native
           npx cap sync android
 

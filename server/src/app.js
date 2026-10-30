@@ -11,6 +11,8 @@ import liburRoutes from './routes/libur.js';
 import rekapRoutes from './routes/rekap.js';
 import dashboardRoutes from './routes/dashboard.js';
 import penggunaRoutes from './routes/pengguna.js';
+import portalRoutes from './routes/portal.js';
+import pengajuanRoutes from './routes/pengajuan.js';
 
 export function buatApp() {
   const app = express();
@@ -44,6 +46,9 @@ export function buatApp() {
   app.use('/api/rekap', wajibLogin, wajibPeran('ADMIN'), rekapRoutes);
   app.use('/api/dashboard', wajibLogin, wajibPeran('ADMIN'), dashboardRoutes);
   app.use('/api/pengguna', wajibLogin, wajibPeran('ADMIN'), penggunaRoutes);
+  app.use('/api/pengajuan', wajibLogin, wajibPeran('ADMIN'), pengajuanRoutes);
+  // Portal karyawan memakai token jenis KARYAWAN (lihat middleware/auth.js)
+  app.use('/api/portal', portalRoutes);
 
   app.use((req, res) => res.status(404).json({ pesan: 'Alamat API tidak ditemukan.' }));
 
