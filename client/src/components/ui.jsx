@@ -88,3 +88,24 @@ export function Stat({ icon, warna, label, nilai, sub, gelap }) {
 export function Memuat({ teks = 'Memuat data…' }) {
   return <div className="empty" role="status">{teks}</div>;
 }
+
+/** Input kata sandi dengan tombol tampilkan/sembunyikan di dalam kolom. */
+export function InputSandi({ className = 'input', ...props }) {
+  const [lihat, setLihat] = useState(false);
+  return (
+    <span className="pw-wrap">
+      <input {...props} className={className} type={lihat ? 'text' : 'password'} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+      <button
+        type="button"
+        className="pw-eye"
+        onClick={() => setLihat((v) => !v)}
+        aria-label={lihat ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+        aria-pressed={lihat}
+        aria-controls={props.id}
+        title={lihat ? 'Sembunyikan' : 'Tampilkan'}
+      >
+        <Icon name={lihat ? 'mataTutup' : 'mata'} size={20} />
+      </button>
+    </span>
+  );
+}

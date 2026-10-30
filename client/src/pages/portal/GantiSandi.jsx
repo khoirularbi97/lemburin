@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
-import { useToast } from '../../components/ui.jsx';
+import { InputSandi, useToast } from '../../components/ui.jsx';
 
 /** Form ganti sandi. Dipakai di halaman wajib (sandi awal) dan di Akun. */
 export function FormSandi({ wajib, onSelesai }) {
@@ -33,15 +33,15 @@ export function FormSandi({ wajib, onSelesai }) {
     <form className="glass pj" onSubmit={kirim} noValidate>
       <div className="fld">
         <label htmlFor="s-lama">{wajib ? 'Sandi awal dari HRD' : 'Sandi sekarang'}</label>
-        <input className="input" id="s-lama" type="password" autoComplete="current-password" value={f.lama} onChange={ubah('lama')} required />
+        <InputSandi id="s-lama" autoComplete="current-password" value={f.lama} onChange={ubah('lama')} required />
       </div>
       <div className="fld">
         <label htmlFor="s-baru">Sandi baru</label>
-        <input className="input" id="s-baru" type="password" autoComplete="new-password" value={f.baru} onChange={ubah('baru')} required />
+        <InputSandi id="s-baru" autoComplete="new-password" value={f.baru} onChange={ubah('baru')} required />
       </div>
       <div className="fld">
         <label htmlFor="s-ulang">Ulangi sandi baru</label>
-        <input className="input" id="s-ulang" type="password" autoComplete="new-password" value={f.ulang} onChange={ubah('ulang')} required />
+        <InputSandi id="s-ulang" autoComplete="new-password" value={f.ulang} onChange={ubah('ulang')} required />
       </div>
       <p className="hint">Minimal 8 karakter, campuran huruf dan angka, tidak berisi NIK.</p>
       {err && <p className="err" role="alert">{err}</p>}

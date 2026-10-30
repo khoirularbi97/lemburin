@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { halamanAwal, useAuth } from '../auth.jsx';
+import { InputSandi } from '../components/ui.jsx';
 
 const KUNCI_MODE = 'lq_mode_login';
 
@@ -74,7 +75,7 @@ export default function Login() {
         </div>
         <div className="fld">
           <label htmlFor="password">Kata sandi</label>
-          <input className="input" id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <InputSandi id="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </div>
         {error && <p className="err" role="alert">{error}</p>}
         <button className="btn lg" type="submit" disabled={proses}>{proses ? 'Memeriksa…' : 'Masuk'}</button>

@@ -16,7 +16,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "node prisma/seed.js",
     "postinstall": "prisma generate",
-    "vapid": "web-push generate-vapid-keys"
+    "vapid": "node scripts/vapid.cjs"
   },
   "dependencies": {
     "@prisma/client": "5.22.0",

@@ -55,14 +55,24 @@ export async function simpanFile(blob, namaFile) {
   return true;
 }
 
-/** Tombol Kembali Android: mundur satu halaman, atau keluar di halaman awal. */
+/**
+ * Tombol Kembali Android. `onKembali` dipanggil setiap kali tombol ditekan;
+ * kembalikan true kalau sudah ditangani. Kalau tidak, halaman mundur satu langkah.
+ */
 export async function pasangTombolKembali(onKembali) {
   if (PLATFORM !== 'android') return () => {};
   const { App } = await import('@capacitor/app');
   const h = await App.addListener('backButton', ({ canGoBack }) => {
-    if (onKembali?.()) return; // ditangani (mis. menutup modal)
+    if (onKembali?.()) return;
     if (canGoBack) window.history.back();
     else App.exitApp();
   });
   return () => h.remove();
+}
+
+/** Tutup aplikasi (Android). Di platform lain tidak melakukan apa-apa. */
+export async function keluarAplikasi() {
+  if (PLATFORM !== 'android') return;
+  const { App } = await import('@capacitor/app');
+  App.exitApp();
 }

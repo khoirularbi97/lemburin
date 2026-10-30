@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { panaskanServer } from './api.js';
 import { halamanAwal, useAuth } from './auth.jsx';
 import { Memuat } from './components/ui.jsx';
+import TombolKembali from './components/TombolKembali.jsx';
 import Login from './pages/Login.jsx';
 import PetugasLayout from './pages/petugas/PetugasLayout.jsx';
 import Riwayat from './pages/petugas/Riwayat.jsx';
@@ -52,6 +53,7 @@ export default function App() {
   return (
     <>
       <StatusServer />
+      <TombolKembali />
       <Suspense fallback={<Memuat teks="Memuat halaman…" />}>
       <Routes>
         <Route path="/login" element={user ? <Navigate to={halamanAwal(user)} replace /> : <Login />} />

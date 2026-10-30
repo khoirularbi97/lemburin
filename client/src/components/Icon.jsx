@@ -20,6 +20,8 @@ const PATHS = {
   print: 'M6 9V3h12v6M6 18H4v-7h16v7h-2M7 14h10v7H7z',
   menu: 'M4 7h16M4 12h16M4 17h16',
   x: 'M6 6l12 12M18 6L6 18',
+  mata: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+  mataTutup: 'M3 3l18 18M10.6 5.1A10.6 10.6 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6A17.4 17.4 0 0 0 2 12s3.6 7 10 7a9.9 9.9 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2',
 };
 
 export default function Icon({ name, size, stroke = 'currentColor', width = 2.2, className }) {
