@@ -12,7 +12,7 @@ import {
 } from '../lib/lembur.js';
 import { liburPada, tapPada } from '../lib/tapManual.js';
 import { buatSlip, ringkasTap } from '../lib/slip.js';
-import { infoPush, kirimKeKaryawan } from '../lib/notifikasi.js';
+import { infoPush, kirimPushRinci, statusFcm } from '../lib/notifikasi.js';
 import { buatJwtKaryawan, wajibKaryawan, wajibSandiSendiri } from '../middleware/auth.js';
 
 const router = Router();
@@ -205,6 +205,25 @@ router.delete('/pengajuan/:id', ah(async (req, res) => {
 
 // ---------- notifikasi ----------
 
+// Kotak masuk (ikon lonceng)
+router.get('/notifikasi/jumlah', ah(async (req, res) => {
+  res.json({ belumDibaca: await prisma.notifikasi.count({ where: { karyawanId: req.karyawan.id, dibaca: false } }) });
+}));
+
+router.get('/notifikasi', ah(async (req, res) => {
+  const list = await prisma.notifikasi.findMany({
+    where: { karyawanId: req.karyawan.id },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  });
+  res.json(list.map((n) => ({ id: n.id, judul: n.judul, isi: n.isi, url: n.url, dibaca: n.dibaca, waktu: n.createdAt })));
+}));
+
+router.post('/notifikasi/baca', ah(async (req, res) => {
+  await prisma.notifikasi.updateMany({ where: { karyawanId: req.karyawan.id, dibaca: false }, data: { dibaca: true } });
+  res.json({ ok: true });
+}));
+
 const skemaLangganan = z.discriminatedUnion('jenis', [
   z.object({
     jenis: z.literal('WEB'),
@@ -245,13 +264,25 @@ router.delete('/push/langganan', ah(async (req, res) => {
 }));
 
 router.post('/push/tes', ah(async (req, res) => {
-  const n = await kirimKeKaryawan(req.karyawan.id, {
+  const r = await kirimPushRinci(req.karyawan.id, {
     judul: 'Notifikasi lemburin aktif',
     isi: 'Anda akan diberi tahu setiap kali lembur tercatat.',
     url: '/portal',
     tag: 'tes',
   });
-  res.json({ terkirim: n });
+  res.json(r);
+}));
+
+// Diagnosa: kondisi server + perangkat terdaftar milik karyawan ini
+router.get('/push/status', ah(async (req, res) => {
+  const [fcm, perangkat] = await Promise.all([
+    statusFcm(),
+    prisma.langgananPush.findMany({ where: { karyawanId: req.karyawan.id }, orderBy: { createdAt: 'desc' } }),
+  ]);
+  res.json({
+    server: { web: infoPush().web, fcm },
+    perangkat: perangkat.map((l) => ({ jenis: l.jenis, perangkat: l.perangkat, sejak: l.createdAt, terakhirDipakai: l.terakhirDipakai })),
+  });
 }));
 
 export default router;

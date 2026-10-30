@@ -27,8 +27,8 @@ function cocok(baris, where = {}) {
 }
 
 export function buatFakePrisma() {
-  const db = { user: [], karyawan: [], lembur: [], pengajuanTap: [], hariLibur: [], langgananPush: [], tapDitolak: [] };
-  const id = { user: 0, karyawan: 0, lembur: 0, pengajuanTap: 0, langgananPush: 0, tapDitolak: 0 };
+  const db = { user: [], karyawan: [], lembur: [], pengajuanTap: [], hariLibur: [], langgananPush: [], tapDitolak: [], notifikasi: [] };
+  const id = { user: 0, karyawan: 0, lembur: 0, pengajuanTap: 0, langgananPush: 0, tapDitolak: 0, notifikasi: 0 };
 
   function sertakan(tabel, baris, include) {
     if (!baris || !include) return baris;
@@ -76,7 +76,7 @@ export function buatFakePrisma() {
         if (tabel === 'langgananPush' && rows().some((r) => r.endpoint === data.endpoint)) {
           const e = new Error('Unique constraint'); e.code = 'P2002'; throw e;
         }
-        const baris = { id: ++id[tabel], createdAt: now(), manual: false, status: 'MENUNGGU', ...data };
+        const baris = { id: ++id[tabel], createdAt: now(), ...(tabel === 'lembur' ? { manual: false } : {}), ...(tabel === 'pengajuanTap' ? { status: 'MENUNGGU' } : {}), ...(tabel === 'notifikasi' ? { dibaca: false } : {}), ...data };
         rows().push(baris);
         return { ...baris };
       },
@@ -117,6 +117,7 @@ export function buatFakePrisma() {
     pengajuanTap: model('pengajuanTap'),
     hariLibur: model('hariLibur'),
     langgananPush: model('langgananPush'),
+    notifikasi: model('notifikasi'),
     tapDitolak: model('tapDitolak'),
     async $queryRaw(strings, ...nilai) {
       const sql = strings.join('?');

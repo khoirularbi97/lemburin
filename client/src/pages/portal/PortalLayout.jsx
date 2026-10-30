@@ -3,13 +3,15 @@ import { Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import Icon from '../../components/Icon.jsx';
-import { pasangKlikNotifikasi } from '../../push.js';
+import { pasangPenerimaNotifikasi } from '../../push.js';
+import { useToast } from '../../components/ui.jsx';
 
 export default function PortalLayout() {
   const { user, perbaruiProfil } = useAuth();
   const nav = useNavigate();
 
-  useEffect(() => { pasangKlikNotifikasi((url) => nav(url)); }, [nav]);
+  const toast = useToast();
+  useEffect(() => { pasangPenerimaNotifikasi({ buka: (url) => nav(url), tampil: (t) => toast(t) }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Ambil profil terbaru sekali saat portal dibuka (401 → otomatis keluar lewat api.js)
   useEffect(() => { api('/api/portal/saya').then((s) => perbaruiProfil(s.karyawan)).catch(() => {}); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

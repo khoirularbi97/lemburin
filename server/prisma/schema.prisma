@@ -70,6 +70,7 @@ model Karyawan {
   tapDitolak      TapDitolak[]
   pengajuan       PengajuanTap[]
   langganan       LanggananPush[]
+  notifikasi      Notifikasi[]
 }
 
 /// Token QR yang sudah diganti. Disimpan supaya scanner bisa bilang "kartu lama".
@@ -165,4 +166,18 @@ model LanggananPush {
   terakhirDipakai DateTime?
 
   @@index([karyawanId])
+}
+
+/// Kotak masuk notifikasi karyawan (ikon lonceng di portal). Disimpan walau push mati.
+model Notifikasi {
+  id         Int      @id @default(autoincrement())
+  karyawanId Int
+  karyawan   Karyawan @relation(fields: [karyawanId], references: [id], onDelete: Cascade)
+  judul      String
+  isi        String
+  url        String   @default("/portal")
+  dibaca     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([karyawanId, createdAt])
 }

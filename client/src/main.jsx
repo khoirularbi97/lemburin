@@ -30,3 +30,8 @@ requestAnimationFrame(() => {
 });
 
 document.documentElement.dataset.platform = PLATFORM;
+
+// Push web masuk → segarkan angka lonceng
+navigator.serviceWorker?.addEventListener?.('message', (e) => {
+  if (e.data?.jenis === 'lq:notif') window.dispatchEvent(new Event('lq:notif'));
+});

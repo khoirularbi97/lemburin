@@ -16,6 +16,7 @@ if (WEB_AKTIF) {
 }
 
 let fcmSiap; // Promise<Messaging|null>
+let fcmGalat = null; // pesan error terakhir saat menyiapkan Firebase (untuk diagnosa)
 function fcm() {
   if (fcmSiap) return fcmSiap;
   const mentah = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -27,8 +28,35 @@ function fcm() {
     const { getMessaging } = await import('firebase-admin/messaging');
     const app = getApps()[0] || initializeApp({ credential: cert(JSON.parse(teks)) });
     return getMessaging(app);
-  })().catch((e) => { console.error('[push] Firebase gagal disiapkan:', e.message); return null; });
+  })().catch((e) => {
+    fcmGalat = e instanceof SyntaxError
+      ? 'FIREBASE_SERVICE_ACCOUNT bukan JSON yang valid. Tempel seluruh isi file service account (atau versi base64-nya).'
+      : /private key/i.test(e.message)
+        ? 'Private key di FIREBASE_SERVICE_ACCOUNT rusak (biasanya karena baris baru hilang saat ditempel). Pakai versi base64: base64 -w0 file.json.'
+        : e.message;
+    console.error('[push] Firebase gagal disiapkan:', fcmGalat);
+    return null;
+  });
   return fcmSiap;
+}
+
+/** Untuk halaman diagnosa: apakah Firebase benar-benar siap dipakai. */
+export async function statusFcm() {
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT) return { siap: false, galat: 'FIREBASE_SERVICE_ACCOUNT belum diisi di server (Render → Environment).' };
+  const m = await fcm();
+  return { siap: Boolean(m), galat: m ? null : fcmGalat };
+}
+
+/** Terjemahkan error pengiriman ke bahasa yang bisa ditindaklanjuti. */
+function jelaskanGalat(e) {
+  const k = e.code || e.errorInfo?.code || '';
+  if (k === 'messaging/registration-token-not-registered' || k === 'messaging/invalid-registration-token') return 'Token perangkat sudah tidak berlaku. Tekan Aktifkan notifikasi lagi.';
+  if (k === 'messaging/mismatched-credential' || k === 'messaging/sender-id-mismatch' || /SenderId mismatch/i.test(e.message)) return 'google-services.json di APK dan service account di Render berasal dari project Firebase yang berbeda.';
+  if (k === 'messaging/third-party-auth-error') return 'Firebase menolak kredensial (cek APNs untuk iOS).';
+  if (/invalid_grant|account not found|Invalid JWT/i.test(e.message)) return 'Service account Firebase tidak valid atau sudah dihapus. Buat private key baru.';
+  if (/Firebase Cloud Messaging API|has not been used|disabled/i.test(e.message)) return 'Firebase Cloud Messaging API (V1) belum aktif di Google Cloud project ini.';
+  if (e.statusCode) return `Layanan push menjawab ${e.statusCode}.`;
+  return e.message || String(k);
 }
 
 export function infoPush() {
@@ -36,9 +64,22 @@ export function infoPush() {
 }
 
 /** Kirim ke semua perangkat milik karyawan. Mengembalikan jumlah yang terkirim. */
-export async function kirimKeKaryawan(karyawanId, { judul, isi, url = '/portal', tag }) {
+/** Kotak masuk + push. Kotak masuk selalu terisi, push hanya kalau perangkat berlangganan. */
+export async function kirimKeKaryawan(karyawanId, pesan) {
+  await prisma.notifikasi.create({ data: { karyawanId, judul: pesan.judul, isi: pesan.isi, url: pesan.url || '/portal' } });
+  return kirimPush(karyawanId, pesan);
+}
+
+/** Hanya push ke perangkat (tanpa menyimpan ke kotak masuk). Mengembalikan jumlah terkirim. */
+export async function kirimPush(karyawanId, pesan) {
+  return (await kirimPushRinci(karyawanId, pesan)).terkirim;
+}
+
+/** Sama dengan kirimPush, tapi mengembalikan rincian per perangkat (untuk tombol Kirim uji). */
+export async function kirimPushRinci(karyawanId, { judul, isi, url = '/portal', tag }) {
   const daftar = await prisma.langgananPush.findMany({ where: { karyawanId } });
-  if (!daftar.length) return 0;
+  const rincian = [];
+  if (!daftar.length) return { terkirim: 0, rincian };
   const payload = { judul, isi, url, tag };
   let terkirim = 0;
   const hapus = [];
@@ -46,7 +87,7 @@ export async function kirimKeKaryawan(karyawanId, { judul, isi, url = '/portal',
   await Promise.all(daftar.map(async (l) => {
     try {
       if (l.jenis === 'WEB') {
-        if (!WEB_AKTIF) return;
+        if (!WEB_AKTIF) { rincian.push({ jenis: l.jenis, perangkat: l.perangkat, ok: false, pesan: 'Kunci VAPID belum diisi di server.' }); return; }
         await webpush.sendNotification(
           { endpoint: l.endpoint, keys: { p256dh: l.p256dh, auth: l.auth } },
           JSON.stringify(payload),
@@ -54,17 +95,20 @@ export async function kirimKeKaryawan(karyawanId, { judul, isi, url = '/portal',
         );
       } else if (l.jenis === 'FCM') {
         const m = await fcm();
-        if (!m) return;
+        if (!m) { rincian.push({ jenis: l.jenis, perangkat: l.perangkat, ok: false, pesan: fcmGalat || 'Firebase belum siap di server.' }); return; }
         await m.send({
           token: l.endpoint,
           notification: { title: judul, body: isi },
           data: { url },
-          android: { priority: 'high', notification: { color: '#2CC9A8', tag } },
+          // channelId 'lembur' dibuat aplikasi dengan prioritas tinggi → muncul sebagai pop-up (heads-up)
+          android: { priority: 'high', notification: { channelId: 'lembur', color: '#2CC9A8', icon: 'ic_stat_lemburin', tag } },
           apns: { payload: { aps: { sound: 'default', 'thread-id': 'lembur' } } },
         });
       }
       terkirim += 1;
+      rincian.push({ jenis: l.jenis, perangkat: l.perangkat, ok: true });
     } catch (e) {
+      rincian.push({ jenis: l.jenis, perangkat: l.perangkat, ok: false, pesan: jelaskanGalat(e) });
       const mati = [404, 410].includes(e.statusCode)
         || ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'].includes(e.code);
       if (mati) hapus.push(l.id); // perangkat sudah berhenti langganan
@@ -78,7 +122,7 @@ export async function kirimKeKaryawan(karyawanId, { judul, isi, url = '/portal',
       where: { karyawanId, id: { notIn: hapus } }, data: { terakhirDipakai: new Date() },
     });
   }
-  return terkirim;
+  return { terkirim, rincian };
 }
 
 const rp = (n) => `Rp${Math.round(n).toLocaleString('id-ID')}`;

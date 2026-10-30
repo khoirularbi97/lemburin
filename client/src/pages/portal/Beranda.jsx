@@ -3,9 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import Icon from '../../components/Icon.jsx';
-import { Avatar, Memuat, Tile, useToast } from '../../components/ui.jsx';
+import { Memuat, Tile, useToast } from '../../components/ui.jsx';
 import { jamFmt, namaBulan, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
 import { aktifkanNotifikasi, jenisDukungan, statusLangganan } from '../../push.js';
+import Lonceng from './Lonceng.jsx';
 import KartuCadangan from './KartuCadangan.jsx';
 import { tanganiError, unduhSlip } from './bersama.js';
 
@@ -75,7 +76,7 @@ export default function Beranda() {
     <main className="p-body">
       <div className="p-head">
         <div><h1>Halo, {namaDepan}</h1><p>{d ? tanggalPanjang(d.hariIni.tanggal) : 'Memuat…'}</p></div>
-        <Avatar nama={user.nama} kunci={user.id} kecil />
+        <Lonceng />
       </div>
 
       {!d ? <Memuat /> : (

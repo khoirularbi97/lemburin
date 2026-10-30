@@ -78,7 +78,8 @@ export async function aktifkanNotifikasi(kunciPublik) {
   if (j === 'fcm') {
     const { PushNotifications } = await import('@capacitor/push-notifications');
     const izin = await PushNotifications.requestPermissions();
-    if (izin.receive !== 'granted') throw new Error('Izin notifikasi ditolak. Aktifkan di Pengaturan HP → Aplikasi → lemburin.');
+    if (izin.receive !== 'granted') throw new Error('Izin notifikasi ditolak. Aktifkan di Pengaturan HP → Aplikasi → lemburin → Notifikasi.');
+    await buatSaluranAndroid(PushNotifications);
     const token = await new Promise((resolve, reject) => {
       let h1; let h2;
       const selesai = () => { h1?.remove(); h2?.remove(); };
@@ -110,12 +111,81 @@ export async function berhentiLangganan() {
   }
 }
 
-/** Ketuk notifikasi di aplikasi native → buka halaman terkait. */
-export async function pasangKlikNotifikasi(buka) {
+/**
+ * Saluran notifikasi Android "Lembur" dengan prioritas tinggi, supaya notifikasi
+ * muncul sebagai pop-up di atas layar (heads-up) + bunyi, bukan hanya ikon di bilah status.
+ */
+async function buatSaluranAndroid(PushNotifications) {
+  if (PLATFORM !== 'android') return;
+  await PushNotifications.createChannel({
+    id: 'lembur',
+    name: 'Lembur',
+    description: 'Lembur tercatat dan hasil pengajuan',
+    importance: 5, // IMPORTANCE_HIGH: pop-up + suara
+    visibility: 1, // tampil di layar kunci
+    lights: true,
+    lightColor: '#2CC9A8',
+    vibration: true,
+  }).catch(() => {});
+}
+
+let idLokal = 1;
+async function tampilkanDiBilahStatus(n) {
+  const { LocalNotifications } = await import('@capacitor/local-notifications');
+  await LocalNotifications.schedule({
+    notifications: [{
+      id: (Date.now() % 2000000000) + (idLokal++),
+      title: n.title || 'lemburin',
+      body: n.body || '',
+      channelId: 'lembur',
+      smallIcon: 'ic_stat_lemburin',
+      iconColor: '#2CC9A8',
+      extra: { url: n.data?.url || '/portal' },
+    }],
+  });
+}
+
+/**
+ * Pasang penerima notifikasi aplikasi native.
+ * - Aplikasi tertutup/di latar belakang: Android sendiri yang menampilkan di bilah status (pop-up).
+ * - Aplikasi sedang dibuka: Android TIDAK menampilkannya, jadi kita tampilkan toast
+ *   dan menyegarkan angka di lonceng lewat event 'lq:notif'.
+ * - Notifikasi diketuk: buka halaman terkait.
+ */
+export async function pasangPenerimaNotifikasi({ buka, tampil }) {
   if (jenisDukungan() !== 'fcm') return;
   const { PushNotifications } = await import('@capacitor/push-notifications');
+  await buatSaluranAndroid(PushNotifications);
+  PushNotifications.addListener('pushNotificationReceived', (n) => {
+    window.dispatchEvent(new Event('lq:notif'));
+    // Android tidak menampilkan push saat aplikasi sedang dibuka, jadi kita tampilkan
+    // sendiri sebagai notifikasi sistem (bilah status + pop-up) lewat notifikasi lokal.
+    tampilkanDiBilahStatus(n).catch(() => tampil?.(n.title ? `${n.title} · ${n.body || ''}` : n.body || 'Notifikasi baru'));
+  });
   PushNotifications.addListener('pushNotificationActionPerformed', (a) => {
+    window.dispatchEvent(new Event('lq:notif'));
     const url = a.notification?.data?.url;
     if (url?.startsWith('/')) buka(url);
   });
+  // Notifikasi lokal (yang kita tampilkan saat aplikasi terbuka) diketuk
+  const { LocalNotifications } = await import('@capacitor/local-notifications');
+  LocalNotifications.addListener('localNotificationActionPerformed', (a) => {
+    const url = a.notification?.extra?.url;
+    if (url?.startsWith('/')) buka(url);
+  });
+}
+
+/** Untuk diagnosa: info build dan izin notifikasi di perangkat ini. */
+export async function infoPerangkat() {
+  const jenis = jenisDukungan();
+  let izin = 'tidak diketahui';
+  try {
+    if (NATIVE_HP && FCM_AKTIF) {
+      const { PushNotifications } = await import('@capacitor/push-notifications');
+      izin = (await PushNotifications.checkPermissions()).receive; // granted | denied | prompt
+    } else if ('Notification' in window) {
+      izin = Notification.permission === 'default' ? 'prompt' : Notification.permission;
+    }
+  } catch { /* abaikan */ }
+  return { platform: PLATFORM, fcmDiBuild: FCM_AKTIF, jenis, izin, tokenLokal: Boolean(localStorage.getItem(KUNCI_TOKEN_FCM)) };
 }

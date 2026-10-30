@@ -185,6 +185,20 @@ test('langganan notifikasi ditolak kalau server belum punya kunci', async () => 
   assert.equal(r.status, 503);
 });
 
+test('lonceng: notifikasi tersimpan di kotak masuk walau push belum aktif', async () => {
+  await new Promise((r) => setTimeout(r, 50)); // notifikasi dikirim tanpa ditunggu
+  const j = await api('/api/portal/notifikasi/jumlah', { token: tokenKaryawan });
+  assert.ok(j.data.belumDibaca >= 3, `scan + disetujui + ditolak, dapat ${j.data.belumDibaca}`);
+  const l = await api('/api/portal/notifikasi', { token: tokenKaryawan });
+  const judul = l.data.map((n) => n.judul);
+  assert.ok(judul.includes('Lembur tercatat'));
+  assert.ok(judul.includes('Pengajuan lembur disetujui'));
+  assert.ok(judul.includes('Pengajuan lembur ditolak'));
+  assert.ok(new Date(l.data[0].waktu) >= new Date(l.data.at(-1).waktu), 'terbaru di atas');
+  await api('/api/portal/notifikasi/baca', { method: 'POST', token: tokenKaryawan });
+  assert.equal((await api('/api/portal/notifikasi/jumlah', { token: tokenKaryawan })).data.belumDibaca, 0);
+});
+
 test('karyawan dinonaktifkan tidak bisa memakai portal', async () => {
   await api('/api/karyawan/1/aktif', { method: 'PATCH', token: tokenAdmin, body: { aktif: false } });
   assert.equal((await api('/api/portal/saya', { token: tokenKaryawan })).status, 401);

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { Konfirmasi, Memuat, useToast } from '../../components/ui.jsx';
 import { hariIniWIB, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
+import Lonceng from './Lonceng.jsx';
 import { STATUS_PENGAJUAN, tanganiError } from './bersama.js';
 
 // Sama dengan aturan server: tanggal 1 bulan lalu sampai hari ini
@@ -57,7 +58,7 @@ export default function Pengajuan() {
 
   return (
     <main className="p-body">
-      <div className="p-head"><div><h1>Lapor tap terlewat</h1><p>HRD memeriksa sebelum lembur dihitung</p></div></div>
+      <div className="p-head"><div><h1>Lapor tap terlewat</h1><p>HRD memeriksa sebelum lembur dihitung</p></div><Lonceng /></div>
 
       <form className="glass pj" onSubmit={kirim} noValidate>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

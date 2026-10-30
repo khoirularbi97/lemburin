@@ -3,6 +3,7 @@
 self.addEventListener('push', (event) => {
   let d = {};
   try { d = event.data ? event.data.json() : {}; } catch { d = { isi: event.data?.text() }; }
+  self.clients.matchAll({ type: 'window' }).then((cs) => cs.forEach((c) => c.postMessage({ jenis: 'lq:notif' })));
   event.waitUntil(self.registration.showNotification(d.judul || 'lemburin', {
     body: d.isi || '',
     icon: '/pwa-192.png',

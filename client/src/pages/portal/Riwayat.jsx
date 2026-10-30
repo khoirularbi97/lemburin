@@ -5,6 +5,7 @@ import { useAuth } from '../../auth.jsx';
 import Icon from '../../components/Icon.jsx';
 import { Memuat, useToast } from '../../components/ui.jsx';
 import { jamFmt, namaBulan, rp, tanggalPendek } from '../../format.js';
+import Lonceng from './Lonceng.jsx';
 import { tanganiError, unduhSlip } from './bersama.js';
 
 export default function Riwayat() {
@@ -24,7 +25,7 @@ export default function Riwayat() {
 
   return (
     <main className="p-body">
-      <div className="p-head"><div><h1>Riwayat lembur</h1><p>Semua tap atas nama Anda</p></div></div>
+      <div className="p-head"><div><h1>Riwayat lembur</h1><p>Semua tap atas nama Anda</p></div><Lonceng /></div>
 
       <div className="fld">
         <label htmlFor="bln">Periode</label>
