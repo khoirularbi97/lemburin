@@ -2,13 +2,14 @@
 // Hanya mendukung operasi yang dipakai rute portal, pengajuan, rekap manual, dan scan.
 
 const RELASI = {
-  lembur: { petugas: ['user', 'petugasId'], karyawan: ['karyawan', 'karyawanId'] },
+  lembur: { petugas: ['user', 'petugasId'], karyawan: ['karyawan', 'karyawanId'], spl: ['spl', 'splId'] },
   pengajuanTap: { karyawan: ['karyawan', 'karyawanId'], diprosesOleh: ['user', 'diprosesOlehId'], lembur: ['lembur', 'lemburId'] },
 };
 
 function cocokNilai(v, syarat) {
   if (syarat && typeof syarat === 'object' && !(syarat instanceof Date)) {
     if ('in' in syarat) return syarat.in.includes(v);
+    if ('not' in syarat) return syarat.not === null ? v != null : v !== syarat.not;
     if ('notIn' in syarat) return !syarat.notIn.includes(v);
     if ('gte' in syarat || 'lt' in syarat) {
       const t = v?.getTime?.() ?? v;
@@ -16,6 +17,7 @@ function cocokNilai(v, syarat) {
     }
   }
   if (v instanceof Date && syarat instanceof Date) return v.getTime() === syarat.getTime();
+  if (syarat === null) return v == null; // kolom opsional yang belum diisi
   return v === syarat;
 }
 
@@ -27,8 +29,8 @@ function cocok(baris, where = {}) {
 }
 
 export function buatFakePrisma() {
-  const db = { user: [], karyawan: [], lembur: [], pengajuanTap: [], hariLibur: [], langgananPush: [], tapDitolak: [], notifikasi: [] };
-  const id = { user: 0, karyawan: 0, lembur: 0, pengajuanTap: 0, langgananPush: 0, tapDitolak: 0, notifikasi: 0 };
+  const db = { user: [], karyawan: [], lembur: [], pengajuanTap: [], hariLibur: [], langgananPush: [], tapDitolak: [], notifikasi: [], spl: [] };
+  const id = { user: 0, karyawan: 0, lembur: 0, pengajuanTap: 0, langgananPush: 0, tapDitolak: 0, notifikasi: 0, spl: 0 };
 
   function sertakan(tabel, baris, include) {
     if (!baris || !include) return baris;
@@ -118,12 +120,13 @@ export function buatFakePrisma() {
     hariLibur: model('hariLibur'),
     langgananPush: model('langgananPush'),
     notifikasi: model('notifikasi'),
+    spl: model('spl'),
     tapDitolak: model('tapDitolak'),
     async $queryRaw(strings, ...nilai) {
       const sql = strings.join('?');
       let l = db.lembur;
       if (sql.includes('"karyawanId" =')) l = l.filter((r) => r.karyawanId === nilai[0]);
-      return [...new Set(l.map((r) => r.tanggal.toISOString().slice(0, 7)))].sort().reverse().map((bulan) => ({ bulan }));
+      return [...new Set(l.map((r) => r.tanggal.getTime()))].map((t) => ({ tanggal: new Date(t) }));
     },
     // Transaksi sederhana: salin data, kembalikan kalau gagal
     async $transaction(fn) {

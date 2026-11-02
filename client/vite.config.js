@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => ({
         navigateFallback: '/index.html',
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         // Splash iPhone cukup diambil saat dibutuhkan, tidak perlu di-cache semua
-        globIgnores: ['splash/**', 'push-sw.js'],
+        globIgnores: ['splash/**', 'push-sw.js', 'ocr/**'],
         // Penangan notifikasi push untuk portal karyawan
         importScripts: ['push-sw.js'],
       },

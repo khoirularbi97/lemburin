@@ -1,6 +1,6 @@
 // Slip lembur bulanan (PDF A4) untuk karyawan.
 import PDFDocument from 'pdfkit';
-import { ATURAN } from './lembur.js';
+import { ATURAN, labelRentang } from './lembur.js';
 
 const NAVY = '#12152B';
 const TEAL = '#0B6E5E';
@@ -44,7 +44,7 @@ export function buatSlip({ karyawan, bulan, taps, perusahaan, dicetak }) {
   doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(20).text('SLIP LEMBUR', x0, 34);
   doc.font('Helvetica').fontSize(10).fillColor('#C5CAE6').text(perusahaan, x0, 60);
   doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(14).text(namaBulan(bulan), x0, 34, { width: L, align: 'right' });
-  doc.font('Helvetica').fontSize(9).fillColor('#C5CAE6').text('lemburin · Satu tap, lembur tercatat', x0, 60, { width: L, align: 'right' });
+  doc.font('Helvetica').fontSize(9).fillColor('#C5CAE6').text(`Periode ${labelRentang(bulan)}`, x0, 60, { width: L, align: 'right' });
 
   // Data karyawan
   let y = 136;

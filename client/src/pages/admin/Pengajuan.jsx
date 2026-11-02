@@ -153,7 +153,7 @@ export default function Pengajuan() {
       )}
 
       <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-        Pengajuan hanya bisa untuk tanggal 1 bulan lalu sampai hari ini. Kalau karyawan sudah punya tap di tanggal itu, pengajuan tidak bisa disetujui. Cocokkan dengan Surat Perintah Lembur sebelum menyetujui.
+        Pengajuan hanya bisa untuk periode berjalan dan periode lalu (periode = tanggal 21 s/d 20 bulan berikutnya). Kalau karyawan sudah punya tap di tanggal itu, pengajuan tidak bisa disetujui. Cocokkan dengan Surat Perintah Lembur sebelum menyetujui.
       </p>
 
       {aksi && (

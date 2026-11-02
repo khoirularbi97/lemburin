@@ -26,8 +26,9 @@ memanggil backend Render yang sama, jadi data selalu sinkron.
 - Upah lembur = jam hitung × upah sejam.
 - Satu karyawan hanya bisa tap satu kali per tanggal (dijaga oleh unique constraint di database).
 - Tanggal selalu dihitung menurut WIB (Asia/Jakarta), bukan jam server.
+- **Periode lembur: tanggal 21 sampai tanggal 20 bulan berikutnya.** Periode diberi nama bulan tempat ia berakhir, misalnya *November 2026* = 21 Okt – 20 Nov 2026. Rekap, Excel, dashboard, portal karyawan, dan slip PDF memakai periode ini. Untuk mengganti tanggal tutup, isi env `TANGGAL_TUTUP_PERIODE` di server dan ubah `TANGGAL_TUTUP` di `client/src/format.js`.
 - Upah sejam disimpan di setiap tap, jadi kenaikan gaji tidak mengubah data lama.
-- Tap terlewat (misalnya lupa scan tanggal 20) hanya bisa ditambahkan **admin** lewat Rekap → *Tambah tap manual*. Aturannya: tanggal paling lama tanggal 1 bulan lalu dan tidak boleh di masa depan, alasan wajib diisi (misalnya nomor SPL), jenis hari dan jam hitung tetap otomatis, dan satu tap per hari tetap berlaku. Tap manual diberi label *Manual* di rekap dan di Excel (kolom Sumber, Dicatat oleh, Alasan manual).
+- Tap terlewat (misalnya lupa scan tanggal 20) hanya bisa ditambahkan **admin** lewat Rekap → *Tambah tap manual*. Aturannya: tanggal paling lama awal periode lalu dan tidak boleh di masa depan, alasan wajib diisi (misalnya nomor SPL), jenis hari dan jam hitung tetap otomatis, dan satu tap per hari tetap berlaku. Tap manual diberi label *Manual* di rekap dan di Excel (kolom Sumber, Dicatat oleh, Alasan manual).
 
 Semua aturan ada di `server/src/lib/lembur.js` dan diuji di `server/test/lembur.test.js`.
 
@@ -186,6 +187,49 @@ berkala dari [cron-job.org](https://cron-job.org) atau UptimeRobot:
 `/health` sengaja tidak menyentuh database, jadi Neon tetap boleh tidur dan
 jatah compute gratisnya hemat. Frontend juga memanggil `/health` saat dibuka
 dan menampilkan banner "Menyambungkan ke server…" kalau server baru bangun.
+
+## Input lembur massal (centang daftar / foto SPL)
+
+Menu **Input lembur massal** (admin) dan tab **Input** (petugas) untuk mencatat lembur banyak
+karyawan sekaligus dari Surat Perintah Lembur. Hasilnya tap manual biasa (5,5 / 14 jam otomatis),
+tercatat atas nama yang menginput, dan karyawan menerima notifikasi.
+
+1. **Centang daftar**: pilih tanggal, jam selesai, No. SPL (opsional), pekerjaan, lalu centang karyawan
+   (ada pencarian, filter departemen, *Pilih semua*). Yang sudah tap di tanggal itu otomatis tidak bisa dipilih.
+2. **Foto SPL**: foto/pilih gambar SPL → dibaca otomatis (nomor, tanggal, jam, keterangan, NIK & nama)
+   → **preview**: periksa centang (badge hijau = NIK cocok, kuning = nama hanya mirip) → **Simpan**.
+   Foto disimpan sebagai bukti dan bisa dibuka admin di Rekap → detail → *Lihat foto SPL*.
+
+Aturan: petugas hanya bisa memilih karyawan di departemen area-nya (area *Semua* = semua karyawan)
+dan tidak melihat nominal upah; tanggal mengikuti batas tap manual (periode berjalan + periode lalu);
+karyawan yang gagal (sudah tap/nonaktif/luar area) dilewati, sisanya tetap tersimpan.
+
+### Foto bukti SPL di Neon Object Storage
+
+Foto dikompres di HP dulu (hitam-putih, 1400 px, WebP; ±20–150 KB) lalu disimpan di
+**Neon Object Storage** (gratis 5 GB per project), bukan di database, jadi kuota database 1 GB tetap lega.
+Foto otomatis dihapus setelah `FOTO_SPL_SIMPAN_BULAN` bulan (bawaan 13); data lemburnya tetap ada.
+
+Cara mengaktifkan (sekali):
+1. Pastikan project Neon ada di region yang mendukung Object Storage
+   (`aws-ap-southeast-1` Singapore, `aws-us-east-1/2`, `aws-eu-central-1`).
+2. Buat bucket privat bernama `foto-spl`: `neon buckets create foto-spl`
+   (CLI: `npm i -g neonctl`, lalu `neon auth`).
+3. Ambil kredensial: Neon Console → **Connect** → tab **Storage** → *Copy credentials*
+   (atau Settings → Credentials → *Create credential* dengan scope `storage:read` + `storage:write`).
+   Secret hanya tampil sekali, simpan baik-baik.
+4. Isi env di Render: `AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+   `STORAGE_BUCKET=foto-spl`. Log Render akan menulis `Foto SPL: Neon Object Storage`.
+
+Tanpa env ini aplikasi tetap jalan dan foto disimpan di kolom database (cocok untuk uji coba).
+Foto hanya bisa dibuka lewat API lemburin (admin, atau petugas yang mengunggahnya); bucket tidak publik.
+Catatan: aturan *lifecycle* di Neon belum dijalankan otomatis, karena itu penghapusan foto lama
+dilakukan oleh server lemburin sendiri (saat bangun dan tiap 12 jam).
+
+Pembaca foto memakai **tesseract.js** yang berjalan di perangkat (foto tidak dikirim ke layanan lain).
+Filenya (±16 MB, termasuk data bahasa Indonesia & Inggris) disalin otomatis ke `client/public/ocr`
+saat `npm run dev`/`build` dan hanya diunduh saat fitur Foto SPL pertama kali dipakai.
+Akurasi terbaik untuk SPL ketikan/cetak yang mencantumkan NIK; tulisan tangan biasanya perlu dicentang manual.
 
 ## Portal karyawan
 

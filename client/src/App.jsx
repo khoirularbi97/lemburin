@@ -18,6 +18,7 @@ const Karyawan = lazy(() => import('./pages/admin/Karyawan.jsx'));
 const Libur = lazy(() => import('./pages/admin/Libur.jsx'));
 const Pengguna = lazy(() => import('./pages/admin/Pengguna.jsx'));
 const PengajuanAdmin = lazy(() => import('./pages/admin/Pengajuan.jsx'));
+const LemburMassal = lazy(() => import('./pages/massal/LemburMassal.jsx'));
 // Portal karyawan
 const PortalLayout = lazy(() => import('./pages/portal/PortalLayout.jsx'));
 const Beranda = lazy(() => import('./pages/portal/Beranda.jsx'));
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/scan" element={<Scan />} />
           <Route path="/riwayat" element={<Riwayat />} />
           <Route path="/akun" element={<Akun />} />
+          <Route path="/input" element={<LemburMassal kecil />} />
         </Route>
         <Route path="/admin" element={<Wajib peran={['ADMIN']}><AdminLayout /></Wajib>}>
           <Route index element={<Dashboard />} />
@@ -69,6 +71,7 @@ export default function App() {
           <Route path="libur" element={<Libur />} />
           <Route path="pengguna" element={<Pengguna />} />
           <Route path="pengajuan" element={<PengajuanAdmin />} />
+          <Route path="massal" element={<LemburMassal />} />
         </Route>
         <Route path="/portal/sandi" element={<Wajib peran={['KARYAWAN']}><GantiSandi /></Wajib>} />
         <Route path="/portal" element={<Wajib peran={['KARYAWAN']}><PortalLayout /></Wajib>}>

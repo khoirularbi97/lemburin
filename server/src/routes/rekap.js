@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ah, HttpError, ringkasKaryawan } from '../lib/util.js';
 import {
-  dariTanggalDb, jamWIB, polaBulan, rentangBulan, upahSejam, waktuJakarta,
+  dariTanggalDb, jamWIB, labelRentang, periodeDari, polaBulan, rentangPeriode, upahSejam, waktuJakarta,
 } from '../lib/lembur.js';
 import { buatTapManual, wajibTanggalManual } from '../lib/tapManual.js';
 import { kabariTapTercatat } from '../lib/notifikasi.js';
@@ -12,11 +12,11 @@ import { kabariTapTercatat } from '../lib/notifikasi.js';
 const router = Router();
 
 async function hitungRekap(bulan, departemen) {
-  const where = { tanggal: rentangBulan(bulan) };
+  const where = { tanggal: rentangPeriode(bulan) };
   if (departemen) where.karyawan = { departemen };
   const taps = await prisma.lembur.findMany({
     where,
-    include: { karyawan: true, petugas: { select: { username: true } } },
+    include: { karyawan: true, petugas: { select: { username: true } }, spl: { select: { id: true, nomor: true, sumber: true, fotoMime: true, fotoDihapus: true } } },
     orderBy: [{ tanggal: 'asc' }, { waktuTap: 'asc' }],
   });
 
@@ -37,6 +37,7 @@ async function hitungRekap(bulan, departemen) {
       id: t.id, tanggal: dariTanggalDb(t.tanggal), jam: jamWIB(t.waktuTap), jenisHari: t.jenisHari,
       jamHitung: t.jamHitung, upahSejam: t.upahSejam, nominal: t.nominal, petugas: t.petugas.username,
       manual: t.manual, alasan: t.alasan,
+      spl: t.spl ? { id: t.spl.id, nomor: t.spl.nomor, sumber: t.spl.sumber, adaFoto: Boolean(t.spl.fotoMime) && !t.spl.fotoDihapus, fotoDihapus: Boolean(t.spl.fotoDihapus) } : null,
     });
   }
 
@@ -52,7 +53,7 @@ async function hitungRekap(bulan, departemen) {
 }
 
 function bacaBulan(q) {
-  const bulan = q.bulan || waktuJakarta().tanggal.slice(0, 7);
+  const bulan = q.bulan || periodeDari(waktuJakarta().tanggal);
   if (!polaBulan(bulan)) throw new HttpError(400, 'Format bulan harus YYYY-MM');
   return bulan;
 }
@@ -63,9 +64,9 @@ router.get('/', ah(async (req, res) => {
 
 // Daftar bulan yang punya data, untuk dropdown periode
 router.get('/bulan', ah(async (req, res) => {
-  const rows = await prisma.$queryRaw`SELECT DISTINCT to_char("tanggal", 'YYYY-MM') AS bulan FROM "Lembur" ORDER BY bulan DESC`;
-  const sekarang = waktuJakarta().tanggal.slice(0, 7);
-  const set = new Set([sekarang, ...rows.map((r) => r.bulan)]);
+  const rows = await prisma.$queryRaw`SELECT DISTINCT "tanggal" FROM "Lembur"`;
+  const sekarang = periodeDari(waktuJakarta().tanggal);
+  const set = new Set([sekarang, ...rows.map((r) => periodeDari(dariTanggalDb(r.tanggal)))]);
   res.json([...set].sort().reverse());
 }));
 
@@ -78,7 +79,7 @@ router.get('/export', ah(async (req, res) => {
   const rp = '#,##0';
 
   const ws = wb.addWorksheet('Rekap');
-  ws.addRow([`Rekap Lembur ${bulan}${req.query.departemen ? ` · ${req.query.departemen}` : ''}`]).font = { bold: true, size: 14 };
+  ws.addRow([`Rekap Lembur periode ${new Date(`${bulan}-15T12:00:00Z`).toLocaleDateString('id-ID', { month: 'long', year: 'numeric', timeZone: 'UTC' })} (${labelRentang(bulan)})${req.query.departemen ? ` · ${req.query.departemen}` : ''}`]).font = { bold: true, size: 14 };
   ws.addRow(['Hari kerja 5,5 jam hitung per tap; Sabtu, Minggu & tanggal merah 14 jam hitung; upah sejam = 1/173 × upah sebulan']);
   ws.addRow([]);
   const head = ws.addRow(['Karyawan', 'NIK', 'Departemen', 'Upah sebulan', 'Upah sejam', 'Tap hari kerja', 'Tap libur', 'Jam hitung', 'Upah lembur']);
@@ -94,7 +95,7 @@ router.get('/export', ah(async (req, res) => {
   wd.addRow(['Tanggal', 'Jam tap', 'Karyawan', 'NIK', 'Departemen', 'Jenis hari', 'Jam hitung', 'Upah sejam', 'Nominal', 'Sumber', 'Dicatat oleh', 'Alasan manual']).font = { bold: true };
   for (const r of rows) {
     for (const t of r.taps) {
-      wd.addRow([t.tanggal, t.jam, r.karyawan.nama, r.karyawan.nik, r.karyawan.departemen, t.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur', t.jamHitung, t.upahSejam, t.nominal, t.manual ? 'Manual' : 'Scan QR', t.petugas, t.alasan || '']);
+      wd.addRow([t.tanggal, t.jam, r.karyawan.nama, r.karyawan.nik, r.karyawan.departemen, t.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur', t.jamHitung, t.upahSejam, t.nominal, t.spl ? (t.spl.sumber === 'FOTO' ? 'Foto SPL' : 'Input massal') : t.manual ? 'Manual' : 'Scan QR', t.petugas, t.alasan || '']);
     }
   }
   wd.columns.forEach((c, i) => { c.width = [12, 9, 24, 12, 18, 12, 11, 12, 12, 10, 16, 36][i]; });

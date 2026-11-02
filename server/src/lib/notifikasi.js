@@ -6,7 +6,7 @@
 // Pengiriman tidak pernah menggagalkan proses utama (scan tetap tercatat walau push gagal).
 import webpush from 'web-push';
 import { prisma } from './prisma.js';
-import { dariTanggalDb, jamWIB } from './lembur.js';
+import { dariTanggalDb, jamWIB, periodeDari } from './lembur.js';
 
 const VAPID_PUBLIK = process.env.VAPID_PUBLIC_KEY || '';
 const VAPID_RAHASIA = process.env.VAPID_PRIVATE_KEY || '';
@@ -140,7 +140,7 @@ export function kabariTapTercatat(karyawan, tap, { manual = false, dariPengajuan
   diam(kirimKeKaryawan(karyawan.id, {
     judul,
     isi: `${tgl(tanggal)} · ${jamWIB(tap.waktuTap)} WIB · ${jamFmt(tap.jamHitung)} jam hitung · ${rp(tap.nominal)}`,
-    url: `/portal/riwayat?bulan=${tanggal.slice(0, 7)}`,
+    url: `/portal/riwayat?bulan=${periodeDari(tanggal)}`,
     tag: `tap-${tap.id}`,
   }));
 }

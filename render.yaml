@@ -37,3 +37,16 @@ services:
       # Opsional: notifikasi aplikasi Android/iOS (Firebase)
       - key: FIREBASE_SERVICE_ACCOUNT
         sync: false
+      # Foto bukti SPL di Neon Object Storage (lihat README)
+      - key: AWS_ENDPOINT_URL_S3
+        sync: false
+      - key: AWS_REGION
+        value: ap-southeast-1
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: STORAGE_BUCKET
+        value: foto-spl
+      - key: FOTO_SPL_SIMPAN_BULAN
+        value: "13"

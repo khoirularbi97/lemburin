@@ -4,7 +4,7 @@ import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import Icon from '../../components/Icon.jsx';
 import { Memuat, Tile, useToast } from '../../components/ui.jsx';
-import { jamFmt, namaBulan, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
+import { jamFmt, labelRentang, namaBulan, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
 import { aktifkanNotifikasi, jenisDukungan, statusLangganan } from '../../push.js';
 import Lonceng from './Lonceng.jsx';
 import KartuCadangan from './KartuCadangan.jsx';
@@ -94,7 +94,7 @@ export default function Beranda() {
           </div>
 
           <div className="dark hero">
-            <span className="lbl">Upah lembur {namaBulan(d.bulan)}</span>
+            <span className="lbl">Upah lembur periode {namaBulan(d.bulan)} · {labelRentang(d.bulan)}</span>
             <span className="big num">{rp(d.total.nominal)}</span>
             <span className="sub num">{d.total.tap} tap · {jamFmt(d.total.jamHitung)} jam hitung · upah sejam {rp(user.upahSejam)}</span>
           </div>
@@ -128,7 +128,7 @@ export default function Beranda() {
                 </div>
                 <span className="v num">{rp(t.nominal)}</span>
               </div>
-            )) : <div className="empty">Belum ada lembur bulan ini.</div>}
+            )) : <div className="empty">Belum ada lembur di periode ini.</div>}
           </div>
 
           <p className="hint">Lupa tap? Laporkan lewat menu <Link className="link" to="/portal/pengajuan">Pengajuan</Link>, nanti HRD memeriksa.</p>

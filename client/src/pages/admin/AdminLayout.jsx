@@ -8,6 +8,7 @@ import { Avatar } from '../../components/ui.jsx';
 const MENU = [
   ['/admin', 'Dashboard', 'grid', true],
   ['/admin/rekap', 'Rekap lembur', 'chart'],
+  ['/admin/massal', 'Input lembur massal', 'plus'],
   ['/admin/pengajuan', 'Pengajuan tap', 'clock'],
   ['/admin/karyawan', 'Data karyawan & ID card', 'users'],
   ['/admin/libur', 'Kalender hari libur', 'cal'],

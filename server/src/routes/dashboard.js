@@ -2,21 +2,21 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { ah, ringkasKaryawan } from '../lib/util.js';
 import {
-  dariTanggalDb, jamWIB, jenisHari, keTanggalDb, rentangBulan, waktuJakarta,
+  dariTanggalDb, jamWIB, jenisHari, keTanggalDb, periodeDari, rentangPeriode, waktuJakarta,
 } from '../lib/lembur.js';
 
 const router = Router();
 
 router.get('/', ah(async (req, res) => {
   const { tanggal, jam } = waktuJakarta();
-  const bulan = tanggal.slice(0, 7);
+  const bulan = periodeDari(tanggal);
   const hariIniDb = keTanggalDb(tanggal);
 
   const [liburHariIni, hariIni, karyawanAktif, tapBulan, terbaru, ditolak, perluCetak, liburBerikut] = await Promise.all([
     prisma.hariLibur.findUnique({ where: { tanggal: hariIniDb } }),
     prisma.lembur.findMany({ where: { tanggal: hariIniDb } }),
     prisma.karyawan.count({ where: { aktif: true } }),
-    prisma.lembur.findMany({ where: { tanggal: rentangBulan(bulan) }, include: { karyawan: { select: { departemen: true } } } }),
+    prisma.lembur.findMany({ where: { tanggal: rentangPeriode(bulan) }, include: { karyawan: { select: { departemen: true } } } }),
     prisma.lembur.findMany({
       take: 6, orderBy: { waktuTap: 'desc' },
       include: { karyawan: true, petugas: { select: { username: true } } },

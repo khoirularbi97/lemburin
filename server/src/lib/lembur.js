@@ -11,6 +11,10 @@ export const ATURAN = Object.freeze({
   jamHariLibur: 14,
   pembagi: 173,
   zonaWaktu: 'Asia/Jakarta',
+  // Periode lembur perusahaan: tanggal 21 sampai tanggal 20 bulan berikutnya.
+  // Periode diberi nama bulan tempat ia berakhir: "November 2026" = 21 Okt – 20 Nov 2026.
+  // Ganti lewat env TANGGAL_TUTUP_PERIODE (1–28). Samakan dengan TANGGAL_TUTUP di client/src/format.js.
+  tanggalTutup: Math.min(28, Math.max(1, Number(process.env.TANGGAL_TUTUP_PERIODE) || 20)),
 });
 
 /** Tanggal (YYYY-MM-DD) dan jam (HH:mm) sekarang menurut WIB. */
@@ -86,17 +90,56 @@ export function rentangBulan(bulan) {
   return { gte, lt };
 }
 
+const ymd = (d) => d.toISOString().slice(0, 10);
+
+/** Kode periode (YYYY-MM) untuk sebuah tanggal. Lewat tanggal tutup → periode bulan berikutnya. */
+export function periodeDari(tanggal, tutup = ATURAN.tanggalTutup) {
+  const [y, m, d] = tanggal.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1 + (d > tutup ? 1 : 0), 1));
+  return t.toISOString().slice(0, 7);
+}
+
+/** Tanggal pertama & terakhir sebuah periode, 'YYYY-MM-DD'. */
+export function batasPeriode(kode, tutup = ATURAN.tanggalTutup) {
+  const [y, m] = kode.split('-').map(Number);
+  return { mulai: ymd(new Date(Date.UTC(y, m - 2, tutup + 1))), selesai: ymd(new Date(Date.UTC(y, m - 1, tutup))) };
+}
+
+/** Rentang periode untuk filter Prisma (gte mulai, lt hari setelah selesai). */
+export function rentangPeriode(kode, tutup = ATURAN.tanggalTutup) {
+  const [y, m] = kode.split('-').map(Number);
+  return { gte: new Date(Date.UTC(y, m - 2, tutup + 1)), lt: new Date(Date.UTC(y, m - 1, tutup + 1)) };
+}
+
+/** Kode periode sebelumnya. */
+export function periodeSebelum(kode) {
+  const [y, m] = kode.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+}
+
+/** "21 Okt – 20 Nov 2026" */
+export function labelRentang(kode) {
+  const { mulai, selesai } = batasPeriode(kode);
+  const f = (s, tahun) => new Date(`${s}T12:00:00Z`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', ...(tahun ? { year: 'numeric' } : {}), timeZone: 'UTC' });
+  return `${f(mulai, mulai.slice(0, 4) !== selesai.slice(0, 4))} – ${f(selesai, true)}`;
+}
+
+/** Batas tanggal tap manual & pengajuan: awal periode lalu sampai hari ini. */
+export function batasManual(hariIni = waktuJakarta().tanggal) {
+  return { min: batasPeriode(periodeSebelum(periodeDari(hariIni))).mulai, max: hariIni };
+}
+
 /**
  * Batas tanggal tap manual: tidak boleh di masa depan, dan paling lama
- * mundur sampai tanggal 1 bulan lalu (supaya rekap yang sudah dibayar tidak berubah).
+ * mundur sampai awal periode lalu (supaya periode yang sudah dibayar tidak berubah).
  * @returns {{ok: true} | {ok: false, pesan: string}}
  */
 export function cekTanggalManual(tanggal, hariIni = waktuJakarta().tanggal) {
   if (!polaTanggal(tanggal)) return { ok: false, pesan: 'Format tanggal harus YYYY-MM-DD.' };
   if (tanggal > hariIni) return { ok: false, pesan: 'Tanggal lembur tidak boleh di masa depan.' };
-  const [y, m] = hariIni.split('-').map(Number);
-  const awal = m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, '0')}-01`;
-  if (tanggal < awal) return { ok: false, pesan: `Tap manual hanya bisa untuk tanggal ${awal} sampai hari ini.` };
+  const awal = batasManual(hariIni).min;
+  const tgl = (s) => new Date(`${s}T12:00:00Z`).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  if (tanggal < awal) return { ok: false, pesan: `Tap manual hanya bisa untuk ${tgl(awal)} sampai hari ini (periode berjalan dan periode lalu).` };
   return { ok: true, awal };
 }
 

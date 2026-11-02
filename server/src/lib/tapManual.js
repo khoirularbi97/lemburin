@@ -30,7 +30,7 @@ export function pesanSudahTap(nama, tap) {
  * Buat tap manual. `db` boleh prisma atau transaksi.
  * @returns {{tap: object, hasil: ReturnType<typeof hitungLembur>}}
  */
-export async function buatTapManual(db, { karyawan, tanggal, jam, alasan, adminId }) {
+export async function buatTapManual(db, { karyawan, tanggal, jam, alasan, adminId, splId = null }) {
   wajibTanggalManual(tanggal);
   if (!karyawan.aktif) throw new HttpError(403, `${karyawan.nama} sedang nonaktif.`);
   const sudah = await tapPada(db, karyawan.id, tanggal);
@@ -49,6 +49,7 @@ export async function buatTapManual(db, { karyawan, tanggal, jam, alasan, adminI
       petugasId: adminId,
       manual: true,
       alasan,
+      ...(splId ? { splId } : {}),
     },
   });
   return { tap, hasil };

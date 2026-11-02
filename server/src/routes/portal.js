@@ -8,7 +8,7 @@ import { prisma } from '../lib/prisma.js';
 import { ah, cekSandiBaru, HttpError, ringkasKaryawan } from '../lib/util.js';
 import {
   cekTanggalManual, dariTanggalDb, jamWIB, jenisHari, keTanggalDb, polaBulan, polaTanggal,
-  rentangBulan, upahSejam, waktuJakarta,
+  periodeDari, rentangPeriode, upahSejam, waktuJakarta,
 } from '../lib/lembur.js';
 import { liburPada, tapPada } from '../lib/tapManual.js';
 import { buatSlip, ringkasTap } from '../lib/slip.js';
@@ -50,7 +50,7 @@ function bentukPengajuan(p) {
   };
 }
 
-const bulanIni = () => waktuJakarta().tanggal.slice(0, 7);
+const bulanIni = () => periodeDari(waktuJakarta().tanggal);
 function bacaBulan(q) {
   const b = q.bulan || bulanIni();
   if (!polaBulan(b)) throw new HttpError(400, 'Format bulan harus YYYY-MM');
@@ -59,7 +59,7 @@ function bacaBulan(q) {
 
 async function tapBulan(karyawanId, bulan) {
   const taps = await prisma.lembur.findMany({
-    where: { karyawanId, tanggal: rentangBulan(bulan) },
+    where: { karyawanId, tanggal: rentangPeriode(bulan) },
     orderBy: [{ tanggal: 'desc' }],
   });
   return taps.map(bentukTap);
@@ -118,7 +118,7 @@ router.get('/ringkasan', ah(async (req, res) => {
     tapBulan(k.id, bulan),
     prisma.lembur.findFirst({ where: { karyawanId: k.id }, orderBy: { tanggal: 'desc' } }),
     prisma.pengajuanTap.count({ where: { karyawanId: k.id, status: 'MENUNGGU' } }),
-    prisma.$queryRaw`SELECT DISTINCT to_char("tanggal", 'YYYY-MM') AS bulan FROM "Lembur" WHERE "karyawanId" = ${k.id} ORDER BY bulan DESC`,
+    prisma.$queryRaw`SELECT DISTINCT "tanggal" FROM "Lembur" WHERE "karyawanId" = ${k.id}`,
     tapPada(prisma, k.id, hariIni),
     liburPada(prisma, hariIni),
   ]);
@@ -126,7 +126,7 @@ router.get('/ringkasan', ah(async (req, res) => {
 
   res.json({
     bulan,
-    bulanTersedia: [...new Set([bulanIni(), ...bulanAda.map((b) => b.bulan)])].sort().reverse(),
+    bulanTersedia: [...new Set([bulanIni(), ...bulanAda.map((b) => periodeDari(dariTanggalDb(b.tanggal)))])].sort().reverse(),
     total: ringkasTap(taps),
     taps,
     tapTerakhir: terakhir ? bentukTap(terakhir) : null,

@@ -2,16 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api.js';
 import { Konfirmasi, Memuat, useToast } from '../../components/ui.jsx';
-import { hariIniWIB, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
+import { batasManual, hariIniWIB, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
 import Lonceng from './Lonceng.jsx';
 import { STATUS_PENGAJUAN, tanganiError } from './bersama.js';
-
-// Sama dengan aturan server: tanggal 1 bulan lalu sampai hari ini
-function batas() {
-  const max = hariIniWIB();
-  const [y, m] = max.split('-').map(Number);
-  return { min: m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, '0')}-01`, max };
-}
 
 function kemarin() {
   const d = new Date(`${hariIniWIB()}T00:00:00Z`);
@@ -22,7 +15,7 @@ function kemarin() {
 export default function Pengajuan() {
   const toast = useToast();
   const nav = useNavigate();
-  const { min, max } = batas();
+  const { min, max } = batasManual();
   const [list, setList] = useState(null);
   const [f, setF] = useState({ tanggal: kemarin() < min ? max : kemarin(), jam: '17:00', alasan: '' });
   const [err, setErr] = useState('');

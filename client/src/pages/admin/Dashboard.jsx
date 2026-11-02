@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api.js';
 import { Memuat, Stat, useToast } from '../../components/ui.jsx';
-import { jamFmt, namaBulan, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
+import { jamFmt, labelRentang, namaBulan, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
 
 export default function Dashboard() {
   const toast = useToast();
@@ -36,19 +36,19 @@ export default function Dashboard() {
         <Stat icon="check" warna="t-teal" label="Sudah tap hari ini" nilai={<>{d.hariIni.tap} <span style={{ fontSize: 16, color: 'var(--muted)' }}>/ {d.hariIni.karyawanAktif}</span></>} sub="karyawan aktif" />
         <Stat icon="clock" warna="t-indigo" label="Jam hitung hari ini" nilai={jamFmt(d.hariIni.jamHitung)} sub={`${d.hariIni.tap} tap`} />
         <Stat icon="coin" warna="t-amber" label="Upah lembur hari ini" nilai={rp(d.hariIni.nominal)} />
-        <Stat icon="chart" warna="t-teal" gelap label={`Upah lembur ${namaBulan(d.bulan.bulan)}`} nilai={rp(d.bulan.nominal)} sub={<Link to="/admin/rekap" style={{ color: '#8FEFD9', fontWeight: 700 }}>Lihat rekap</Link>} />
+        <Stat icon="chart" warna="t-teal" gelap label={`Upah lembur periode ${namaBulan(d.bulan.bulan)}`} nilai={rp(d.bulan.nominal)} sub={<Link to="/admin/rekap" style={{ color: '#8FEFD9', fontWeight: 700 }}>Lihat rekap</Link>} />
       </div>
 
       <div className="cols">
         <section className="glass panel c3">
           <h2>Upah lembur per departemen</h2>
-          <p className="sub">{namaBulan(d.bulan.bulan)}</p>
+          <p className="sub">Periode {labelRentang(d.bulan.bulan)}</p>
           {perDepartemen.length ? perDepartemen.map((p) => (
             <div className="barrow" key={p.departemen}>
               <div className="h"><span>{p.departemen}</span><span className="num" style={{ fontWeight: 800 }}>{rp(p.nominal)}</span></div>
               <div className="track"><div className="fill" style={{ width: `${((p.nominal / max) * 100).toFixed(1)}%` }} /></div>
             </div>
-          )) : <div className="empty">Belum ada lembur bulan ini.</div>}
+          )) : <div className="empty">Belum ada lembur di periode ini.</div>}
 
           <div style={{ borderTop: '1px solid var(--line)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>Komposisi jam hitung</h3>

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  cekTanggalManual, hitungLembur, jenisHari, rentangBulan, upahSejam, waktuJakarta,
+  batasPeriode, cekTanggalManual, hitungLembur, labelRentang, periodeDari, rentangPeriode, jenisHari, rentangBulan, upahSejam, waktuJakarta,
 } from '../src/lib/lembur.js';
 
 const libur = new Map([['2026-12-25', 'Hari Raya Natal']]);
@@ -46,17 +46,35 @@ test('rentang bulan Desember melompat ke Januari', () => {
   assert.equal(lt.toISOString().slice(0, 10), '2027-01-01');
 });
 
-test('tap manual: boleh bulan ini dan bulan lalu, tidak boleh masa depan', () => {
-  const hariIni = '2026-10-29';
-  assert.equal(cekTanggalManual('2026-10-20', hariIni).ok, true);
-  assert.equal(cekTanggalManual('2026-10-29', hariIni).ok, true);
-  assert.equal(cekTanggalManual('2026-09-01', hariIni).ok, true);
-  assert.equal(cekTanggalManual('2026-08-31', hariIni).ok, false);
-  assert.equal(cekTanggalManual('2026-10-30', hariIni).ok, false);
-  assert.equal(cekTanggalManual('2026-13-01', hariIni).ok, false);
+test('periode lembur 21 s/d 20 bulan berikutnya', () => {
+  assert.equal(periodeDari('2026-10-20'), '2026-10');
+  assert.equal(periodeDari('2026-10-21'), '2026-11');
+  assert.equal(periodeDari('2026-11-02'), '2026-11');
+  assert.equal(periodeDari('2026-12-25'), '2027-01'); // lewat tahun
+  assert.deepEqual(batasPeriode('2026-11'), { mulai: '2026-10-21', selesai: '2026-11-20' });
+  assert.deepEqual(batasPeriode('2027-01'), { mulai: '2026-12-21', selesai: '2027-01-20' });
+  const { gte, lt } = rentangPeriode('2026-03');
+  assert.equal(gte.toISOString().slice(0, 10), '2026-02-21');
+  assert.equal(lt.toISOString().slice(0, 10), '2026-03-21');
+  assert.equal(labelRentang('2026-11'), '21 Okt – 20 Nov 2026');
+  assert.equal(labelRentang('2027-01'), '21 Des 2026 – 20 Jan 2027');
 });
 
-test('tap manual di bulan Januari boleh mundur ke Desember tahun lalu', () => {
-  assert.equal(cekTanggalManual('2026-12-15', '2027-01-05').ok, true);
-  assert.equal(cekTanggalManual('2026-11-30', '2027-01-05').ok, false);
+test('tap manual: periode berjalan dan periode lalu saja, tidak boleh masa depan', () => {
+  // 2 Nov 2026 → periode Nov (21 Okt–20 Nov), periode lalu Okt (21 Sep–20 Okt)
+  const hariIni = '2026-11-02';
+  assert.equal(cekTanggalManual('2026-10-20', hariIni).ok, true);
+  assert.equal(cekTanggalManual('2026-09-21', hariIni).ok, true);
+  assert.equal(cekTanggalManual('2026-09-20', hariIni).ok, false);
+  assert.equal(cekTanggalManual('2026-11-03', hariIni).ok, false);
+  assert.equal(cekTanggalManual('2026-13-01', hariIni).ok, false);
+  // 25 Nov → sudah periode Des, periode lalu Nov (mulai 21 Okt)
+  assert.equal(cekTanggalManual('2026-10-21', '2026-11-25').ok, true);
+  assert.equal(cekTanggalManual('2026-10-20', '2026-11-25').ok, false);
+});
+
+test('tap manual di awal tahun boleh mundur ke periode Desember', () => {
+  // 5 Jan 2027 → periode Jan (21 Des–20 Jan), periode lalu Des (21 Nov–20 Des)
+  assert.equal(cekTanggalManual('2026-11-21', '2027-01-05').ok, true);
+  assert.equal(cekTanggalManual('2026-11-20', '2027-01-05').ok, false);
 });

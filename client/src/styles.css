@@ -322,3 +322,33 @@ body:has(.tabs) .toast { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); 
 .cek { display: flex; gap: 10px; align-items: flex-start; }
 .cek .badge { min-width: 70px; justify-content: center; }
 .cek b { font-size: 14px; }
+
+/* ---------- Input lembur massal ---------- */
+.ms-foto { border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.ms-drop { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 26px 16px; border: 2px dashed var(--field); border-radius: 18px; cursor: pointer; background: rgba(255,255,255,.6); }
+.ms-drop:hover, .ms-drop:focus-within { border-color: var(--tealGlow); background: #F4FBF9; }
+.ms-drop .muted { font-size: 13px; max-width: 420px; }
+.ms-tips { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.ms-baca { display: flex; gap: 14px; align-items: flex-start; }
+.ms-baca > img, .ms-thumb img { width: 92px; height: 120px; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); background: #fff; display: block; }
+.ms-thumb { padding: 0; border: 0; background: none; cursor: zoom-in; flex-shrink: 0; }
+.ms-prog { height: 10px; border-radius: 6px; background: #E6E9F3; overflow: hidden; margin: 10px 0 6px; }
+.ms-prog i { display: block; height: 100%; background: linear-gradient(90deg, var(--tealGlow), var(--teal)); transition: width .3s; }
+.ms-ocr { white-space: pre-wrap; font-size: 12px; max-height: 220px; overflow: auto; background: #F1F3FA; border-radius: 10px; padding: 10px; margin: 8px 0 0; }
+.ms-list { border-radius: 22px; padding: 8px 14px 4px; display: flex; flex-direction: column; }
+.ms-tools { display: flex; gap: 10px; flex-wrap: wrap; padding: 6px 0 10px; }
+.ms-tools .input:first-child { flex: 1 1 220px; }
+.ms-row { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; border-radius: 10px; }
+.ms-row:last-child { border-bottom: 0; }
+.ms-row input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--teal); flex-shrink: 0; }
+.ms-row.on { background: #F0FAF7; }
+.ms-row.off { opacity: .55; cursor: default; }
+.ms-row .t { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.ms-row .t > span:not(.badge) { font-size: 12px; color: var(--muted); }
+.ms-row .t .badge { align-self: flex-start; font-size: 11px; padding: 2px 8px; }
+.ms-row .v { font-weight: 800; font-size: 14px; white-space: nowrap; }
+.ms-all { background: #F7F8FC; margin-bottom: 4px; }
+.ms-bar { position: sticky; bottom: 12px; z-index: 6; border-radius: 20px; padding: 12px 14px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.p-body .ms-bar { bottom: calc(86px + env(safe-area-inset-bottom)); }
+.p-body .form { grid-template-columns: 1fr 1fr; padding: 14px; }
+@media (max-width: 520px) { .ms-row .v .num { display: none; } }

@@ -11,7 +11,7 @@ const AKAR = ['/login', '/scan', '/portal', '/portal/sandi', '/admin'];
 function induk(path) {
   if (path.startsWith('/portal/')) return '/portal';
   if (path.startsWith('/admin/')) return '/admin';
-  if (path === '/riwayat' || path === '/akun') return '/scan';
+  if (path === '/riwayat' || path === '/akun' || path === '/input') return '/scan';
   return null;
 }
 

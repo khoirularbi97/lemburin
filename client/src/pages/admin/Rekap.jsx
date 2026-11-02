@@ -3,15 +3,7 @@ import { api } from '../../api.js';
 import Icon from '../../components/Icon.jsx';
 import { NATIVE_HP, simpanFile } from '../../platform.js';
 import { Avatar, Konfirmasi, Memuat, Modal, Stat, useToast } from '../../components/ui.jsx';
-import { angka, hariIniWIB, jamFmt, namaBulan, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
-
-// Sama dengan aturan server (cekTanggalManual): tanggal 1 bulan lalu sampai hari ini
-function batasManual() {
-  const max = hariIniWIB();
-  const [y, m] = max.split('-').map(Number);
-  const min = m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, '0')}-01`;
-  return { min, max };
-}
+import { angka, batasManual, hariIniWIB, jamFmt, labelRentang, namaBulan, periodeDari, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
 
 function kemarinWIB() {
   const d = new Date(`${hariIniWIB()}T00:00:00Z`);
@@ -57,7 +49,7 @@ function TapManual({ onTutup, onSelesai }) {
     try {
       const r = await api('/api/rekap/tap', { method: 'POST', body: { ...f, karyawanId: Number(f.karyawanId), alasan: f.alasan.trim() } });
       toast(`Tap manual ${r.karyawan.nama} ${tanggalPendek(r.tap.tanggal)} tercatat · ${rp(r.tap.nominal)}`);
-      onSelesai(r.tap.tanggal.slice(0, 7));
+      onSelesai(periodeDari(r.tap.tanggal));
     } catch (e2) {
       setErr(e2.message);
     } finally {
@@ -105,6 +97,24 @@ function TapManual({ onTutup, onSelesai }) {
   );
 }
 
+function FotoSpl({ spl, onClose }) {
+  const [url, setUrl] = useState('');
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let u = '';
+    api(`/api/lembur-massal/spl/${spl.id}/foto`, { raw: true })
+      .then((r) => r.blob()).then((b) => { u = URL.createObjectURL(b); setUrl(u); })
+      .catch((e) => setErr(e.message));
+    return () => { if (u) URL.revokeObjectURL(u); };
+  }, [spl.id]);
+  return (
+    <Modal judul={`Foto SPL${spl.nomor ? ` ${spl.nomor}` : ''}`} onClose={onClose} lebar={900}>
+      {err ? <p className="err">{err}</p> : url ? <img src={url} alt="Foto SPL" style={{ width: '100%', borderRadius: 14 }} /> : <Memuat />}
+      <div className="acts"><button type="button" className="btn key" onClick={onClose} autoFocus>Tutup</button></div>
+    </Modal>
+  );
+}
+
 export default function Rekap() {
   const toast = useToast();
   const [daftarBulan, setDaftarBulan] = useState([]);
@@ -116,6 +126,7 @@ export default function Rekap() {
   const [hapus, setHapus] = useState(null);
   const [ekspor, setEkspor] = useState(false);
   const [manual, setManual] = useState(false);
+  const [fotoSpl, setFotoSpl] = useState(null);
 
   useEffect(() => {
     api('/api/rekap/bulan').then((b) => { setDaftarBulan(b); setBulan(b[0]); }).catch((e) => toast(e.message, true));
@@ -150,12 +161,12 @@ export default function Rekap() {
   return (
     <>
       <div className="ph">
-        <div><h1>Rekap lembur</h1><p>Hari kerja 5,5 jam hitung per tap · Sabtu, Minggu &amp; tanggal merah 14 jam hitung per tap</p></div>
+        <div><h1>Rekap lembur</h1><p>Periode tanggal 21 s/d 20 bulan berikutnya · hari kerja 5,5 jam, Sabtu/Minggu/tanggal merah 14 jam hitung per tap</p></div>
         <div className="acts">
           <div className="fld">
-            <label htmlFor="bulan">Periode</label>
-            <select className="input" id="bulan" value={bulan} onChange={(e) => setBulan(e.target.value)} style={{ minWidth: 170 }}>
-              {daftarBulan.map((b) => <option key={b} value={b}>{namaBulan(b)}</option>)}
+            <label htmlFor="bulan">Periode (21–20)</label>
+            <select className="input" id="bulan" value={bulan} onChange={(e) => setBulan(e.target.value)} style={{ minWidth: 260 }}>
+              {daftarBulan.map((b) => <option key={b} value={b}>{namaBulan(b)} · {labelRentang(b)}</option>)}
             </select>
           </div>
           <div className="fld">
@@ -180,7 +191,7 @@ export default function Rekap() {
             <Stat icon="users" warna="t-indigo" label="Karyawan lembur" nilai={rows.length} />
             <Stat icon="scan" warna="t-teal" label="Total tap" nilai={t.tapKerja + t.tapLibur} sub={`${t.tapKerja} hari kerja · ${t.tapLibur} libur`} />
             <Stat icon="clock" warna="t-amber" label="Total jam hitung" nilai={jamFmt(t.jamHitung)} />
-            <Stat icon="coin" warna="t-teal" gelap label="Total upah lembur" nilai={rp(t.nominal)} sub={namaBulan(bulan)} />
+            <Stat icon="coin" warna="t-teal" gelap label="Total upah lembur" nilai={rp(t.nominal)} sub={labelRentang(bulan)} />
           </div>
 
           <div className="glass tablebox">
@@ -226,9 +237,11 @@ export default function Rekap() {
                                           <td>
                                             <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
                                               <span className={`badge ${x.jenisHari === 'KERJA' ? 'b-ok' : 'b-warn'}`}>{x.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur'}</span>
-                                              {x.manual && <span className="badge b-ink" title={x.alasan || ''}>Manual</span>}
+                                              {x.manual && <span className="badge b-ink" title={x.alasan || ''}>{x.spl ? (x.spl.sumber === 'FOTO' ? 'Foto SPL' : 'Massal') : 'Manual'}</span>}
                                             </span>
                                             {x.manual && x.alasan && <div className="muted" style={{ fontSize: 12, marginTop: 4, maxWidth: 260 }}>{x.alasan}</div>}
+                                            {x.spl?.adaFoto && <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => setFotoSpl(x.spl)}>Lihat foto SPL</button>}
+                                            {x.spl?.fotoDihapus && <div className="muted" style={{ fontSize: 12 }}>Foto SPL sudah dihapus (lewat masa simpan)</div>}
                                           </td>
                                           <td className="n">{jamFmt(x.jamHitung)}</td>
                                           <td className="n">{angka(x.upahSejam)}</td>
@@ -256,7 +269,7 @@ export default function Rekap() {
               </table>
             </div>
           </div>
-          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Upah sejam = 1/173 × upah sebulan (upah pokok + tunjangan tetap), sesuai PP 35/2021. Klik baris karyawan untuk melihat detail tap dan menghapus tap yang keliru. Lembur yang lupa di-tap bisa ditambahkan lewat Tambah tap manual (bulan ini dan bulan lalu).</p>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Upah sejam = 1/173 × upah sebulan (upah pokok + tunjangan tetap), sesuai PP 35/2021. Klik baris karyawan untuk melihat detail tap dan menghapus tap yang keliru. Lembur yang lupa di-tap bisa ditambahkan lewat Tambah tap manual (periode berjalan dan periode lalu).</p>
         </>
       )}
 
@@ -270,6 +283,8 @@ export default function Rekap() {
           }}
         />
       )}
+
+      {fotoSpl && <FotoSpl spl={fotoSpl} onClose={() => setFotoSpl(null)} />}
 
       {hapus && (
         <Konfirmasi

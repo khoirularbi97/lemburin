@@ -7,11 +7,15 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "build:native": "vite build --mode native",
+    "build:native": "node scripts/salin-ocr.mjs && vite build --mode native",
     "cap:sync": "npm run build:native && cap sync",
     "android": "npm run cap:sync && cap open android",
     "ios": "npm run cap:sync && cap open ios",
-    "ikon:native": "capacitor-assets generate --android --ios --iconBackgroundColor '#12152B' --iconBackgroundColorDark '#12152B' --splashBackgroundColor '#12152B' --splashBackgroundColorDark '#12152B'"
+    "ikon:native": "capacitor-assets generate --android --ios --iconBackgroundColor '#12152B' --iconBackgroundColorDark '#12152B' --splashBackgroundColor '#12152B' --splashBackgroundColorDark '#12152B'",
+    "ocr": "node scripts/salin-ocr.mjs",
+    "prebuild": "node scripts/salin-ocr.mjs",
+    "predev": "node scripts/salin-ocr.mjs",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@capacitor/android": "8.5.3",
@@ -27,11 +31,14 @@
     "qrcode": "1.5.4",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-router-dom": "6.28.0"
+    "react-router-dom": "6.28.0",
+    "tesseract.js": "7.0.0"
   },
   "devDependencies": {
     "@capacitor/assets": "3.0.5",
     "@capacitor/cli": "8.5.3",
+    "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/ind": "1.0.0",
     "@vitejs/plugin-react": "4.3.4",
     "vite": "5.4.11",
     "vite-plugin-pwa": "0.21.1"

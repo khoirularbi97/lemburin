@@ -5,3 +5,5 @@ dist
 dev-dist
 .vercel
 .DS_Store
+# Disalin otomatis dari node_modules saat build (npm run ocr)
+client/public/ocr/

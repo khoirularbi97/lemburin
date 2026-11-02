@@ -42,6 +42,7 @@ model User {
   tapDicatat   Lembur[]
   tapDitolak   TapDitolak[]
   pengajuanDiproses PengajuanTap[] @relation("PengajuanDiproses")
+  splDibuat    Spl[]
 }
 
 model Karyawan {
@@ -104,6 +105,9 @@ model Lembur {
   createdAt  DateTime  @default(now())
   /// Ada isinya kalau tap ini berasal dari pengajuan karyawan yang disetujui
   pengajuan  PengajuanTap?
+  /// Ada isinya kalau tap dicatat lewat input lembur massal (centang daftar / foto SPL)
+  splId      Int?
+  spl        Spl?      @relation(fields: [splId], references: [id], onDelete: SetNull)
 
   /// Satu karyawan hanya boleh satu tap per hari
   @@unique([karyawanId, tanggal])
@@ -180,4 +184,31 @@ model Notifikasi {
   createdAt  DateTime @default(now())
 
   @@index([karyawanId, createdAt])
+}
+
+/// Surat Perintah Lembur yang dipakai untuk input lembur massal.
+model Spl {
+  id          Int      @id @default(autoincrement())
+  nomor       String?
+  tanggal     DateTime @db.Date
+  jamSelesai  String
+  alasan      String
+  /// "CENTANG" (pilih dari daftar) atau "FOTO" (dibaca dari foto SPL)
+  sumber      String   @default("CENTANG")
+  /// Foto SPL sebagai bukti. Disimpan di Neon Object Storage (fotoKey);
+  /// kolom foto hanya dipakai kalau object storage belum diatur.
+  foto        Bytes?
+  fotoMime    String?
+  fotoKey     String?
+  fotoUkuran  Int?
+  /// Diisi saat foto dihapus karena lewat masa simpan (data lembur tetap ada)
+  fotoDihapus DateTime?
+  teksOcr     String?
+  dibuatOlehId Int
+  dibuatOleh  User     @relation(fields: [dibuatOlehId], references: [id])
+  createdAt   DateTime @default(now())
+  lembur      Lembur[]
+
+  @@index([tanggal])
+  @@index([createdAt])
 }
