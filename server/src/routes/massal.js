@@ -9,6 +9,7 @@ import { batasManual, hitungLembur, jamWIB, keTanggalDb, polaTanggal } from '../
 import { buatTapManual, liburPada, wajibTanggalManual } from '../lib/tapManual.js';
 import { kabariTapTercatat } from '../lib/notifikasi.js';
 import { azureAktif, bacaGambar, pemakaian } from '../lib/azureOcr.js';
+import { bacaSplGemini, geminiAktif, modelGemini, pemakaianGemini } from '../lib/geminiOcr.js';
 import { bacaFoto as ambilFoto, bersihkanFotoLama, buangFoto, MASA_SIMPAN_BULAN, simpanFoto } from '../lib/fotoSpl.js';
 
 const router = Router();
@@ -25,15 +26,17 @@ router.get('/batas', ah(async (req, res) => {
   res.json({
     ...batasManual(),
     masaSimpanFotoBulan: MASA_SIMPAN_BULAN,
-    pembaca: azureAktif ? { jenis: 'AZURE', ...(await pemakaian()) } : { jenis: 'LOKAL' },
+    // Urutan: Gemini (berbayar) → Azure → pembaca lokal di HP
+    pembaca: geminiAktif ? { jenis: 'GEMINI', model: modelGemini, ...(await pemakaianGemini()) }
+      : azureAktif ? { jenis: 'AZURE', periode: 'bulan', ...(await pemakaian()) } : { jenis: 'LOKAL' },
   });
 }));
 
-// Baca potongan kolom SPL (Nama–Alasan + strip tanggal) lewat Azure.
-// Batas sederhana per pengguna supaya tidak menghabiskan kuota (20/menit di tier gratis).
+// Baca potongan kolom SPL (Nama–Alasan + strip tanggal) lewat Gemini atau Azure.
+// Batas sederhana per pengguna supaya tidak menghabiskan kuota.
 const terakhirBaca = new Map();
 router.post('/baca-spl', ah(async (req, res) => {
-  const { gambar } = z.object({ gambar: z.string().max(4_000_000) }).parse(req.body);
+  const { gambar, jumlahBaris } = z.object({ gambar: z.string().max(4_000_000), jumlahBaris: z.number().int().min(1).max(60).optional() }).parse(req.body);
   const m = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(gambar);
   if (!m) throw new HttpError(400, 'Gambar harus JPEG, PNG, atau WEBP.');
   const buf = Buffer.from(m[2], 'base64');
@@ -41,8 +44,13 @@ router.post('/baca-spl', ah(async (req, res) => {
   const t = terakhirBaca.get(req.user.id) || 0;
   if (Date.now() - t < 3000) throw new HttpError(429, 'Tunggu sebentar sebelum membaca lagi.');
   terakhirBaca.set(req.user.id, Date.now());
+  if (geminiAktif) {
+    if (!jumlahBaris) throw new HttpError(400, 'jumlahBaris wajib untuk pembaca Gemini. Muat ulang aplikasi.');
+    const hasil = await bacaSplGemini(buf, `image/${m[1]}`, jumlahBaris);
+    return res.json({ ...hasil, pemakaian: await pemakaianGemini() });
+  }
   const hasil = await bacaGambar(buf);
-  res.json({ ...hasil, pemakaian: await pemakaian() });
+  res.json({ jenis: 'AZURE', ...hasil, pemakaian: { periode: 'bulan', ...(await pemakaian()) } });
 }));
 
 // Daftar karyawan yang boleh dipilih + status tap di tanggal itu

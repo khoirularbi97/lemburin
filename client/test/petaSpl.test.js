@@ -85,3 +85,22 @@ test('SPL contoh: baris, jam ikut atas, alasan, dan pencocokan', () => {
   assert.equal(yakinSalah, 0, 'tidak boleh ada centang otomatis yang salah');
   assert.ok(r.baris.every((b, i) => b.saran.some((s) => s.id === i + 1)), 'nama benar selalu ada di 3 saran');
 });
+
+test('hasil Gemini (isi per baris) dipetakan sama seperti hasil Azure', () => {
+  const sel = Array.from({ length: 35 }, (_, i) => {
+    const r = SPL[i] || ['', '', '', '', ''];
+    // Gemini menuliskan tanda "sama dengan atas" sebagai "
+    const sama = (v) => (v === '' && i > 0 && i < SPL.length ? '"' : v);
+    return { nama: r[0], bagian: sama(r[1]), mulai: sama(r[2]), selesai: sama(r[3]), alasan: sama(r[4]) };
+  });
+  const p = petakanSpl({ sel, teksStrip: 'Hari : Minggu\nTanggal : 15.02.2026' }, KARYAWAN);
+  assert.equal(p.tanggal, '2026-02-15');
+  assert.equal(p.baris.length, 22);
+  assert.equal(p.jamUmum, '18:30');
+  assert.equal(p.baris[1].alasan, 'cek di line 2.');
+  assert.equal(p.baris[11].alasan, 'Cek BEJ');
+  const benar = p.baris.filter((b, i) => b.saran[0].nama === BENAR[i]).length;
+  const salahYakin = p.baris.filter((b, i) => b.yakin && b.saran[0].nama !== BENAR[i]).length;
+  assert.equal(benar, 22);
+  assert.equal(salahYakin, 0);
+});

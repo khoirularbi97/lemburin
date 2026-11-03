@@ -231,6 +231,34 @@ Foto hanya bisa dibuka lewat API lemburin (admin, atau petugas yang mengunggahny
 Catatan: aturan *lifecycle* di Neon belum dijalankan otomatis, karena itu penghapusan foto lama
 dilakukan oleh server lemburin sendiri (saat bangun dan tiap 12 jam).
 
+### Pembaca SPL tulisan tangan (Gemini API, berbayar) — disarankan
+
+Kalau `GEMINI_API_KEY` diisi, SPL dibaca **Gemini** (didahulukan dari Azure). Gemini langsung
+mengembalikan isi tabel per baris (nama, bagian, jam mulai/selesai, alasan); pencocokan nama ke data
+karyawan tetap dilakukan di HP. Yang dikirim sama seperti Azure: hanya baris Hari/Tanggal + kolom
+NAMA s/d ALASAN, hitam-putih.
+
+**Wajib tier berbayar.** Ketentuan Gemini API melarang data pribadi dikirim ke tier gratis, dan isi tier
+gratis bisa dipakai Google untuk melatih model. Kunci dari project tanpa billing **jangan** dipakai.
+
+Biaya kira-kira: satu SPL ±1.500 token masuk + ±1.000 token keluar. Dengan `gemini-3.8-flash`
+(per Nov 2026: $0,75 / $3,75 per 1 juta token) ≈ $0,005 (±Rp80) per SPL. Harga bisa berubah;
+cek halaman harga Gemini API. `GEMINI_BATAS_HARIAN` (bawaan 100) membatasi pemakaian per hari.
+
+Cara mengaktifkan:
+1. Buka [aistudio.google.com](https://aistudio.google.com) → login akun Google → **Get API key** →
+   **Create API key** (buat project baru, mis. `lemburin`).
+2. Aktifkan billing untuk project itu: di halaman API keys klik **Set up billing** (atau lewat
+   Google Cloud Console → Billing), tambahkan kartu. Pastikan tier project tertulis **berbayar / Tier 1**,
+   bukan *Free*.
+3. Pasang batas anggaran: Google Cloud Console → **Billing → Budgets & alerts → Create budget**,
+   mis. Rp50.000/bulan dengan peringatan email 50%, 90%, 100%.
+4. Di Render → Environment: isi `GEMINI_API_KEY` (opsional `GEMINI_MODEL`, `GEMINI_BATAS_HARIAN`) → deploy.
+5. Di layar Foto SPL akan tertulis *Dibaca Gemini · kuota hari ini N/100*.
+
+Kalau Gemini gagal (kunci salah, batas tercapai, tabel tidak terdeteksi), aplikasi kembali ke pembaca lokal.
+Hasil baca tetap **wajib diperiksa** di preview sebelum disimpan.
+
 ### Pembaca SPL tulisan tangan (Azure AI Vision)
 
 SPL tulisan tangan (format SNY-FRM-HRD-006) dibaca dengan **Azure AI Vision – Read**, tier gratis
@@ -426,7 +454,7 @@ Semua endpoint selain `/health` dan `/api/auth/login` butuh header
 | GET | `/api/dashboard` | admin | Ringkasan dashboard |
 | GET/POST/PATCH | `/api/pengguna`, `/api/pengguna/:id` | admin | Kelola akun |
 | GET | `/api/lembur-massal/batas` | admin, petugas | Batas tanggal, daftar karyawan, pembaca (Azure/lokal) |
-| POST | `/api/lembur-massal/baca-spl` | admin, petugas | Baca potongan SPL lewat Azure (kunci di server) |
+| POST | `/api/lembur-massal/baca-spl` | admin, petugas | Baca potongan SPL lewat Gemini/Azure (kunci di server) |
 | POST | `/api/lembur-massal` | admin, petugas | Simpan lembur massal (+ jam/alasan per karyawan, foto SPL) |
 
 Respons `POST /api/scan`:

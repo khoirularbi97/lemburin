@@ -57,3 +57,10 @@ services:
         sync: false
       - key: AZURE_VISION_BATAS_BULANAN
         value: "4500"
+      # Pembaca SPL tulisan tangan (Gemini API berbayar; didahulukan dari Azure)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
+      - key: GEMINI_BATAS_HARIAN
+        value: "100"

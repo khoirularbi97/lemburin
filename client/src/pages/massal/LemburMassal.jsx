@@ -16,8 +16,10 @@ function kemarin(min) {
 
 /* ---------- Tahap foto SPL ---------- */
 
-/** Baca SPL lewat Azure: potong kolom → kirim → petakan baris. null = pakai pembaca lokal. */
-async function bacaLewatAzure(file, karyawan, setProgres, toast) {
+const NAMA_PEMBACA = { GEMINI: 'Gemini', AZURE: 'Azure' };
+
+/** Baca SPL lewat Gemini/Azure: potong kolom → kirim → petakan baris. null = pakai pembaca lokal. */
+async function bacaLewatAwan(file, karyawan, setProgres, toast, jenis) {
   setProgres({ persen: 10, tahap: 'Mencari tabel SPL…' });
   const { siapkanSpl } = await import('../../lib/potongSpl.js');
   const spl = await siapkanSpl(file);
@@ -25,34 +27,50 @@ async function bacaLewatAzure(file, karyawan, setProgres, toast) {
     toast('Tabel SPL tidak terdeteksi. Foto ulang lebih lurus & seluruh tabel terlihat. Dipakai pembaca lokal dulu.', true);
     return null;
   }
-  setProgres({ persen: 45, tahap: 'Membaca tulisan tangan (Azure)…' });
+  setProgres({ persen: 45, tahap: `Membaca tulisan tangan (${NAMA_PEMBACA[jenis]})…` });
+  const jumlahBaris = spl.tabel.baris.length - 1;
   let r;
   try {
-    r = await api('/api/lembur-massal/baca-spl', { method: 'POST', body: { gambar: spl.gambar } });
+    r = await api('/api/lembur-massal/baca-spl', { method: 'POST', body: { gambar: spl.gambar, jumlahBaris } });
   } catch (e) {
     toast(`${e.message} Dipakai pembaca lokal.`, true);
     return null;
   }
   setProgres({ persen: 90, tahap: 'Mencocokkan nama karyawan…' });
-  const kata = []; const strip = [];
-  for (const l of r.baris) {
-    const cy = l.kotak.reduce((a, p) => a + p.y, 0) / l.kotak.length;
-    if (cy < spl.stripBawah) { strip.push(l.teks); continue; }
-    for (const w of l.kata) kata.push({ teks: w.teks, kotak: w.kotak.map((p) => spl.keKecil(p.x, p.y)) });
+  let peta; let teks;
+  if (r.jenis === 'GEMINI') {
+    // Gemini mengembalikan isi per baris tabel langsung
+    const sel = Array.from({ length: jumlahBaris }, (_, i) => {
+      const b = r.baris[i] || {};
+      return { nama: b.nama || '', bagian: b.bagian || '', mulai: b.mulai || '', selesai: b.selesai || '', alasan: b.alasan || '' };
+    });
+    const teksStrip = `Hari : ${r.hari || ''}\nTanggal : ${r.tanggal || ''}`;
+    peta = petakanSpl({ sel, teksStrip }, karyawan);
+    teks = [teksStrip, ...r.baris.map((b) => [b.no, b.nama, b.bagian, b.mulai, b.selesai, b.alasan].join(' | '))].join('\n');
+  } else {
+    const kata = []; const strip = [];
+    for (const l of r.baris) {
+      const cy = l.kotak.reduce((a, p) => a + p.y, 0) / l.kotak.length;
+      if (cy < spl.stripBawah) { strip.push(l.teks); continue; }
+      for (const w of l.kata) kata.push({ teks: w.teks, kotak: w.kotak.map((p) => spl.keKecil(p.x, p.y)) });
+    }
+    peta = petakanSpl({ kata, tabel: spl.tabel, teksStrip: strip.join('\n') }, karyawan);
+    teks = r.baris.map((l) => l.teks).join('\n');
   }
-  const peta = petakanSpl({ kata, tabel: spl.tabel, teksStrip: strip.join('\n') }, karyawan);
   const { kompresBukti } = await import('../../lib/ocr.js');
   return {
-    jenis: 'AZURE',
+    jenis: r.jenis || jenis,
+    awan: true,
     fotoDataUrl: kompresBukti(spl.img),
-    teks: r.baris.map((l) => l.teks).join('\n'),
+    teks,
     pemakaian: r.pemakaian,
     baris: peta.baris.map((b) => ({ ...b, potongan: spl.potongNama(b.no - 1) })),
     baca: { nomor: null, tanggal: peta.tanggal, jam: peta.jamUmum, keterangan: peta.alasanUmum, cocok: [] },
   };
 }
 
-function UnggahFoto({ onHasil, karyawanSemua, azure }) {
+function UnggahFoto({ onHasil, karyawanSemua, awan }) {
+  const nama = NAMA_PEMBACA[awan];
   const toast = useToast();
   const [pratinjau, setPratinjau] = useState('');
   const [progres, setProgres] = useState(null);
@@ -64,8 +82,8 @@ function UnggahFoto({ onHasil, karyawanSemua, azure }) {
     setPratinjau(URL.createObjectURL(file));
     setProgres({ persen: 0, tahap: 'Menyiapkan…' });
     try {
-      if (azure) {
-        const ra = await bacaLewatAzure(file, karyawanSemua, setProgres, toast);
+      if (awan) {
+        const ra = await bacaLewatAwan(file, karyawanSemua, setProgres, toast, awan);
         if (ra) { onHasil(ra); return; }
       }
       const { bacaFotoSpl } = await import('../../lib/ocr.js');
@@ -87,8 +105,8 @@ function UnggahFoto({ onHasil, karyawanSemua, azure }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <b>{progres.tahap}</b>
             <div className="ms-prog" role="progressbar" aria-valuenow={progres.persen} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${progres.persen}%` }} /></div>
-            <p className="hint">{azure
-              ? 'Hanya kolom Nama–Alasan dan tanggal yang dikirim ke Azure. Kop perusahaan dan tanda tangan tidak ikut dikirim.'
+            <p className="hint">{awan
+              ? `Hanya kolom Nama–Alasan dan tanggal yang dikirim ke ${nama}. Kop perusahaan dan tanda tangan tidak ikut dikirim.`
               : 'Dibaca di perangkat ini, foto tidak dikirim ke layanan lain. Pertama kali butuh beberapa detik.'}</p>
           </div>
         </div>
@@ -97,7 +115,7 @@ function UnggahFoto({ onHasil, karyawanSemua, azure }) {
           <label className="ms-drop" htmlFor="foto-spl">
             <span className="tile t-indigo" style={{ width: 54, height: 54, borderRadius: 16 }}><Icon name="camera" /></span>
             <b>Foto atau pilih gambar SPL</b>
-            <span className="muted">{azure
+            <span className="muted">{awan
               ? 'Formulir SPL (SNY-FRM-HRD-006): nama, jam, dan alasan per baris dibaca otomatis, termasuk tulisan tangan. Anda periksa dulu sebelum disimpan.'
               : 'Nomor, tanggal, jam, dan nama/NIK karyawan dibaca otomatis (tulisan cetak). Anda periksa dulu sebelum disimpan.'}</span>
           </label>
@@ -280,7 +298,7 @@ export default function LemburMassal({ kecil = false }) {
         <button type="button" role="tab" aria-selected={mode === 'foto'} className={mode === 'foto' ? 'on' : ''} onClick={() => gantiMode('foto')}>Foto SPL</button>
       </div>
 
-      {mode === 'foto' && !foto && <UnggahFoto karyawanSemua={semuaRef.current} onHasil={terimaFoto} azure={batas?.pembaca?.jenis === 'AZURE' && batas.pembaca.sisa > 0} />}
+      {mode === 'foto' && !foto && <UnggahFoto karyawanSemua={semuaRef.current} onHasil={terimaFoto} awan={['GEMINI', 'AZURE'].includes(batas?.pembaca?.jenis) && batas.pembaca.sisa > 0 ? batas.pembaca.jenis : null} />}
 
       {mode === 'foto' && foto && (
         <div className="glass ms-foto">
@@ -289,9 +307,9 @@ export default function LemburMassal({ kecil = false }) {
             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <b>Hasil baca foto</b>
               <span className="muted" style={{ fontSize: 13 }}>
-                {foto.jenis === 'AZURE' ? '' : `${foto.baca.nomor ? `No. ${foto.baca.nomor}` : 'Nomor tidak terbaca'} · `}{foto.baca.tanggal ? tanggalPendek(foto.baca.tanggal) : 'tanggal tidak terbaca'} · {foto.baca.jam ? `s/d ${foto.baca.jam}` : 'jam tidak terbaca'}
+                {foto.awan ? '' : `${foto.baca.nomor ? `No. ${foto.baca.nomor}` : 'Nomor tidak terbaca'} · `}{foto.baca.tanggal ? tanggalPendek(foto.baca.tanggal) : 'tanggal tidak terbaca'} · {foto.baca.jam ? `s/d ${foto.baca.jam}` : 'jam tidak terbaca'}
               </span>
-              {foto.jenis === 'AZURE' && foto.baris ? (() => {
+              {foto.awan && foto.baris ? (() => {
                 const yakin = foto.baris.filter((r) => r.yakin).length;
                 return <span className={`badge ${yakin === foto.baris.length ? 'b-ok' : 'b-warn'}`} style={{ alignSelf: 'flex-start' }}>{yakin} dari {foto.baris.length} baris cocok otomatis</span>;
               })() : <span className={`badge ${foto.baca.cocok.length ? 'b-ok' : 'b-warn'}`} style={{ alignSelf: 'flex-start' }}>{foto.baca.cocok.length} karyawan dikenali</span>}
@@ -301,8 +319,8 @@ export default function LemburMassal({ kecil = false }) {
               </div>
             </div>
           </div>
-          {foto.jenis === 'AZURE'
-            ? <p className="hint">Dibaca Azure{foto.pemakaian ? ` · kuota bulan ini ${foto.pemakaian.jumlah}/${foto.pemakaian.batas}` : ''}. Periksa tiap baris di bawah: baris kuning belum dicocokkan otomatis.</p>
+          {foto.awan
+            ? <p className="hint">Dibaca {NAMA_PEMBACA[foto.jenis]}{foto.pemakaian ? ` · kuota ${foto.pemakaian.periode === 'hari' ? 'hari' : 'bulan'} ini ${foto.pemakaian.jumlah}/${foto.pemakaian.batas}` : ''}. Periksa tiap baris di bawah: baris kuning belum dicocokkan otomatis.</p>
             : <p className="hint">Periksa kembali: hapus centang yang salah, centang yang terlewat. Badge kuning berarti nama hanya mirip.</p>}
         </div>
       )}

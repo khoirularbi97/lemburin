@@ -1,4 +1,4 @@
-// Ubah hasil baca Azure (kata + kotak posisi) menjadi baris SPL:
+// Ubah hasil baca Azure (kata + kotak posisi) atau Gemini (isi per baris) menjadi baris SPL:
 // nama, bagian, jam mulai/selesai, alasan — termasuk tanda "sama dengan atas".
 // Lalu cocokkan nama ke daftar karyawan. Murni, bisa diuji di Node.
 import { cariTanggal } from './bacaSpl.js';
@@ -152,11 +152,12 @@ export function saranKaryawan(terbaca, karyawan, n = 3) {
 
 /**
  * Proses lengkap dari hasil Azure.
- * @param {{kata:Array, tabel:object, kataStrip?:Array}} o
+ * @param {{kata?:Array, tabel?:object, teksStrip?:string, sel?:Array<Record<string,string>>}} o
  * @param {Array<{id:number,nama:string}>} karyawan
  */
-export function petakanSpl({ kata, tabel, teksStrip = '' }, karyawan) {
-  const baris = susunBaris(kataKeSel(kata, tabel));
+export function petakanSpl({ kata, tabel, teksStrip = '', sel }, karyawan) {
+  // sel = isi per baris yang sudah jadi (Gemini); kata = kata + kotak posisi (Azure)
+  const baris = susunBaris(sel || kataKeSel(kata, tabel));
   // Satu karyawan hanya boleh terpilih sekali: kalau dua baris yakin ke orang sama, yang skornya lebih rendah jadi ragu
   const dipakai = new Map();
   const hasil = baris.map((r) => {
