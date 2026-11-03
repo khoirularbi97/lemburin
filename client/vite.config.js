@@ -35,6 +35,10 @@ export default defineConfig(({ mode }) => ({
         globIgnores: ['splash/**', 'push-sw.js', 'ocr/**'],
         // Penangan notifikasi push untuk portal karyawan
         importScripts: ['push-sw.js'],
+        // Versi baru langsung aktif & cache versi lama dibuang (mencegah file lama dicari lagi)
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
       },
     }),
   ].filter(Boolean),

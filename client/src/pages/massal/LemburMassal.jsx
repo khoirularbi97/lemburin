@@ -90,7 +90,9 @@ function UnggahFoto({ onHasil, karyawanSemua, awan }) {
       const r = await bacaFotoSpl(file, (persen, tahap) => setProgres({ persen, tahap }));
       onHasil({ ...r, jenis: 'LOKAL', baca: bacaSpl(r.teks, karyawanSemua) });
     } catch (err) {
-      toast(err.message || 'Foto tidak bisa dibaca. Coba foto ulang lebih terang dan lurus.', true);
+      const versiLama = /dynamically imported module|Importing a module script failed/i.test(err?.message || '');
+      toast(versiLama ? 'Aplikasi baru diperbarui. Tutup lalu buka lagi lemburin (atau muat ulang halaman), kemudian coba lagi.'
+        : (err.message || 'Foto tidak bisa dibaca. Coba foto ulang lebih terang dan lurus.'), true);
       setPratinjau('');
     } finally {
       setProgres(null);

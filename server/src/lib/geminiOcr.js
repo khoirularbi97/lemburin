@@ -110,9 +110,15 @@ export async function bacaSplGemini(buf, mime, jumlahBaris) {
   if (!res.ok) {
     const pesan = json?.error?.message || `Gemini menjawab ${res.status}`;
     if (res.status === 401 || res.status === 403 || /api key/i.test(pesan)) {
-      throw new HttpError(502, 'Kunci Gemini ditolak. Periksa GEMINI_API_KEY dan pastikan billing project aktif.', { kode: 'GEMINI_KUNCI' });
+      throw new HttpError(502, 'Kunci Gemini ditolak. Periksa GEMINI_API_KEY di Render.', { kode: 'GEMINI_KUNCI' });
     }
     if (res.status === 404) throw new HttpError(502, `Model ${MODEL} tidak tersedia. Periksa GEMINI_MODEL.`, { kode: 'GEMINI_MODEL' });
+    if (res.status === 429 && /limit:\s*0\b/i.test(pesan)) {
+      throw new HttpError(502, `Model ${MODEL} tidak tersedia untuk kunci ini (tier gratis). Ganti GEMINI_MODEL ke model yang ada di halaman rate limit AI Studio.`, { kode: 'GEMINI_MODEL' });
+    }
+    if (res.status === 429 && /per ?day|PerDay/i.test(pesan)) {
+      throw new HttpError(429, 'Batas harian Gemini habis. Besok bisa dipakai lagi; hari ini centang manual dulu.', { kode: 'KUOTA_HABIS' });
+    }
     if (res.status === 429) throw new HttpError(429, 'Gemini sedang membatasi permintaan. Coba lagi semenit lagi.', { kode: 'GEMINI_SIBUK' });
     throw new HttpError(502, `Gemini gagal membaca: ${pesan}`, { kode: 'GEMINI_GAGAL' });
   }

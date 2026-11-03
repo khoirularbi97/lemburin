@@ -35,3 +35,16 @@ document.documentElement.dataset.platform = PLATFORM;
 navigator.serviceWorker?.addEventListener?.('message', (e) => {
   if (e.data?.jenis === 'lq:notif') window.dispatchEvent(new Event('lq:notif'));
 });
+
+// Setelah deploy baru, file lama (mis. assets/ocr-xxxx.js) sudah tidak ada di server, tapi
+// halaman yang masih terbuka/ter-cache masih mencarinya → "Failed to fetch dynamically imported
+// module". Muat ulang sekali supaya memakai versi terbaru (dijaga agar tidak berulang terus).
+window.addEventListener('vite:preloadError', (e) => {
+  const KUNCI = 'lq:muatUlangVersi';
+  let terakhir = 0;
+  try { terakhir = Number(sessionStorage.getItem(KUNCI)) || 0; } catch { /* abaikan */ }
+  if (Date.now() - terakhir < 30000) return; // baru saja dimuat ulang: biarkan error tampil
+  try { sessionStorage.setItem(KUNCI, String(Date.now())); } catch { /* abaikan */ }
+  e.preventDefault();
+  window.location.reload();
+});
