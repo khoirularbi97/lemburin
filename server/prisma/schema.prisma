@@ -212,3 +212,9 @@ model Spl {
   @@index([tanggal])
   @@index([createdAt])
 }
+
+/// Pemakaian pembaca SPL (Azure) per bulan, supaya tidak melewati kuota gratis.
+model PemakaianOcr {
+  bulan  String @id // YYYY-MM
+  jumlah Int    @default(0)
+}

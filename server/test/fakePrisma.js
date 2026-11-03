@@ -28,9 +28,16 @@ function cocok(baris, where = {}) {
   });
 }
 
+function terapkan(r, data) {
+  for (const [k, v] of Object.entries(data)) {
+    if (v && typeof v === 'object' && 'increment' in v) r[k] = (r[k] || 0) + v.increment;
+    else r[k] = v;
+  }
+}
+
 export function buatFakePrisma() {
-  const db = { user: [], karyawan: [], lembur: [], pengajuanTap: [], hariLibur: [], langgananPush: [], tapDitolak: [], notifikasi: [], spl: [] };
-  const id = { user: 0, karyawan: 0, lembur: 0, pengajuanTap: 0, langgananPush: 0, tapDitolak: 0, notifikasi: 0, spl: 0 };
+  const db = { user: [], karyawan: [], lembur: [], pengajuanTap: [], hariLibur: [], langgananPush: [], tapDitolak: [], notifikasi: [], spl: [], pemakaianOcr: [] };
+  const id = { user: 0, karyawan: 0, lembur: 0, pengajuanTap: 0, langgananPush: 0, tapDitolak: 0, notifikasi: 0, spl: 0, pemakaianOcr: 0 };
 
   function sertakan(tabel, baris, include) {
     if (!baris || !include) return baris;
@@ -85,7 +92,7 @@ export function buatFakePrisma() {
       async update({ where, data }) {
         const r = rows().find((x) => cocok(x, where));
         if (!r) { const e = new Error('not found'); e.code = 'P2025'; throw e; }
-        Object.assign(r, data);
+        terapkan(r, data);
         return { ...r };
       },
       async updateMany({ where, data }) {
@@ -95,7 +102,7 @@ export function buatFakePrisma() {
       },
       async upsert({ where, update, create }) {
         const r = rows().find((x) => cocok(x, where));
-        if (r) { Object.assign(r, update); return { ...r }; }
+        if (r) { terapkan(r, update); return { ...r }; }
         return this.create({ data: create });
       },
       async deleteMany({ where }) {
@@ -121,6 +128,7 @@ export function buatFakePrisma() {
     langgananPush: model('langgananPush'),
     notifikasi: model('notifikasi'),
     spl: model('spl'),
+    pemakaianOcr: model('pemakaianOcr'),
     tapDitolak: model('tapDitolak'),
     async $queryRaw(strings, ...nilai) {
       const sql = strings.join('?');

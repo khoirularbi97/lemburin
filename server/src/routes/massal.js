@@ -8,6 +8,7 @@ import { ah, HttpError } from '../lib/util.js';
 import { batasManual, hitungLembur, jamWIB, keTanggalDb, polaTanggal } from '../lib/lembur.js';
 import { buatTapManual, liburPada, wajibTanggalManual } from '../lib/tapManual.js';
 import { kabariTapTercatat } from '../lib/notifikasi.js';
+import { azureAktif, bacaGambar, pemakaian } from '../lib/azureOcr.js';
 import { bacaFoto as ambilFoto, bersihkanFotoLama, buangFoto, MASA_SIMPAN_BULAN, simpanFoto } from '../lib/fotoSpl.js';
 
 const router = Router();
@@ -20,7 +21,29 @@ function lingkup(user) {
 }
 
 // Batas tanggal yang boleh diinput (sama dengan tap manual)
-router.get('/batas', (req, res) => res.json({ ...batasManual(), masaSimpanFotoBulan: MASA_SIMPAN_BULAN }));
+router.get('/batas', ah(async (req, res) => {
+  res.json({
+    ...batasManual(),
+    masaSimpanFotoBulan: MASA_SIMPAN_BULAN,
+    pembaca: azureAktif ? { jenis: 'AZURE', ...(await pemakaian()) } : { jenis: 'LOKAL' },
+  });
+}));
+
+// Baca potongan kolom SPL (Nama–Alasan + strip tanggal) lewat Azure.
+// Batas sederhana per pengguna supaya tidak menghabiskan kuota (20/menit di tier gratis).
+const terakhirBaca = new Map();
+router.post('/baca-spl', ah(async (req, res) => {
+  const { gambar } = z.object({ gambar: z.string().max(4_000_000) }).parse(req.body);
+  const m = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(gambar);
+  if (!m) throw new HttpError(400, 'Gambar harus JPEG, PNG, atau WEBP.');
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length > 3_000_000) throw new HttpError(413, 'Potongan SPL terlalu besar.');
+  const t = terakhirBaca.get(req.user.id) || 0;
+  if (Date.now() - t < 3000) throw new HttpError(429, 'Tunggu sebentar sebelum membaca lagi.');
+  terakhirBaca.set(req.user.id, Date.now());
+  const hasil = await bacaGambar(buf);
+  res.json({ ...hasil, pemakaian: await pemakaian() });
+}));
 
 // Daftar karyawan yang boleh dipilih + status tap di tanggal itu
 router.get('/karyawan', ah(async (req, res) => {
@@ -59,6 +82,12 @@ const skema = z.object({
   sumber: z.enum(['CENTANG', 'FOTO']).default('CENTANG'),
   foto: z.string().max(4_000_000).optional().nullable(), // data URL JPEG/PNG/WEBP
   teksOcr: z.string().max(20_000).optional().nullable(),
+  // Jam/alasan berbeda per karyawan (dari baris SPL). Kosong = pakai jam & alasan umum.
+  rincian: z.array(z.object({
+    karyawanId: z.coerce.number().int().positive(),
+    jam: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional().nullable(),
+    alasan: z.string().trim().max(200).optional().nullable(),
+  })).max(MAKS_KARYAWAN).optional(),
 });
 
 function bacaFoto(dataUrl) {
@@ -110,7 +139,8 @@ router.post('/', ah(async (req, res) => {
     throw e;
   }
 
-  const keterangan = `${d.nomorSpl ? `SPL ${d.nomorSpl}: ` : 'Input massal: '}${d.alasan}`.slice(0, 300);
+  const rinci = new Map((d.rincian || []).map((r) => [r.karyawanId, r]));
+  const keterangan = (alasan) => `${d.nomorSpl ? `SPL ${d.nomorSpl}: ` : 'Input massal: '}${alasan || d.alasan}`.slice(0, 300);
   const hasil = [];
   // Satu per satu supaya satu karyawan yang gagal (mis. sudah tap) tidak membatalkan yang lain
   for (const id of ids) {
@@ -119,7 +149,10 @@ router.post('/', ah(async (req, res) => {
     const r = { karyawanId: id, nama: k.nama, nik: k.nik };
     if (area && k.departemen !== area) { hasil.push({ ...r, status: 'GAGAL', pesan: `Di luar area Anda (${area}).` }); continue; }
     try {
-      const { tap } = await buatTapManual(prisma, { karyawan: k, tanggal: d.tanggal, jam: d.jam, alasan: keterangan, adminId: req.user.id, splId: spl.id });
+      const r2 = rinci.get(id);
+      const { tap } = await buatTapManual(prisma, {
+        karyawan: k, tanggal: d.tanggal, jam: r2?.jam || d.jam, alasan: keterangan(r2?.alasan), adminId: req.user.id, splId: spl.id,
+      });
       kabariTapTercatat(k, tap, { manual: true });
       hasil.push({ ...r, status: 'OK', jamHitung: tap.jamHitung, ...(req.user.role === 'ADMIN' ? { nominal: tap.nominal } : {}) });
     } catch (e) {

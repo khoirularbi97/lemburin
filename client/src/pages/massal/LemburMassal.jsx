@@ -5,6 +5,7 @@ import Icon from '../../components/Icon.jsx';
 import { Avatar, Memuat, Modal, useToast } from '../../components/ui.jsx';
 import { hariIniWIB, jamFmt, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
 import { bacaSpl } from '../../lib/bacaSpl.js';
+import { petakanSpl } from '../../lib/petaSpl.js';
 
 function kemarin(min) {
   const d = new Date(`${hariIniWIB()}T00:00:00Z`);
@@ -15,7 +16,43 @@ function kemarin(min) {
 
 /* ---------- Tahap foto SPL ---------- */
 
-function UnggahFoto({ onHasil, karyawanSemua }) {
+/** Baca SPL lewat Azure: potong kolom → kirim → petakan baris. null = pakai pembaca lokal. */
+async function bacaLewatAzure(file, karyawan, setProgres, toast) {
+  setProgres({ persen: 10, tahap: 'Mencari tabel SPL…' });
+  const { siapkanSpl } = await import('../../lib/potongSpl.js');
+  const spl = await siapkanSpl(file);
+  if (spl.gagal) {
+    toast('Tabel SPL tidak terdeteksi. Foto ulang lebih lurus & seluruh tabel terlihat. Dipakai pembaca lokal dulu.', true);
+    return null;
+  }
+  setProgres({ persen: 45, tahap: 'Membaca tulisan tangan (Azure)…' });
+  let r;
+  try {
+    r = await api('/api/lembur-massal/baca-spl', { method: 'POST', body: { gambar: spl.gambar } });
+  } catch (e) {
+    toast(`${e.message} Dipakai pembaca lokal.`, true);
+    return null;
+  }
+  setProgres({ persen: 90, tahap: 'Mencocokkan nama karyawan…' });
+  const kata = []; const strip = [];
+  for (const l of r.baris) {
+    const cy = l.kotak.reduce((a, p) => a + p.y, 0) / l.kotak.length;
+    if (cy < spl.stripBawah) { strip.push(l.teks); continue; }
+    for (const w of l.kata) kata.push({ teks: w.teks, kotak: w.kotak.map((p) => spl.keKecil(p.x, p.y)) });
+  }
+  const peta = petakanSpl({ kata, tabel: spl.tabel, teksStrip: strip.join('\n') }, karyawan);
+  const { kompresBukti } = await import('../../lib/ocr.js');
+  return {
+    jenis: 'AZURE',
+    fotoDataUrl: kompresBukti(spl.img),
+    teks: r.baris.map((l) => l.teks).join('\n'),
+    pemakaian: r.pemakaian,
+    baris: peta.baris.map((b) => ({ ...b, potongan: spl.potongNama(b.no - 1) })),
+    baca: { nomor: null, tanggal: peta.tanggal, jam: peta.jamUmum, keterangan: peta.alasanUmum, cocok: [] },
+  };
+}
+
+function UnggahFoto({ onHasil, karyawanSemua, azure }) {
   const toast = useToast();
   const [pratinjau, setPratinjau] = useState('');
   const [progres, setProgres] = useState(null);
@@ -27,9 +64,13 @@ function UnggahFoto({ onHasil, karyawanSemua }) {
     setPratinjau(URL.createObjectURL(file));
     setProgres({ persen: 0, tahap: 'Menyiapkan…' });
     try {
+      if (azure) {
+        const ra = await bacaLewatAzure(file, karyawanSemua, setProgres, toast);
+        if (ra) { onHasil(ra); return; }
+      }
       const { bacaFotoSpl } = await import('../../lib/ocr.js');
       const r = await bacaFotoSpl(file, (persen, tahap) => setProgres({ persen, tahap }));
-      onHasil({ ...r, baca: bacaSpl(r.teks, karyawanSemua) });
+      onHasil({ ...r, jenis: 'LOKAL', baca: bacaSpl(r.teks, karyawanSemua) });
     } catch (err) {
       toast(err.message || 'Foto tidak bisa dibaca. Coba foto ulang lebih terang dan lurus.', true);
       setPratinjau('');
@@ -46,7 +87,9 @@ function UnggahFoto({ onHasil, karyawanSemua }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <b>{progres.tahap}</b>
             <div className="ms-prog" role="progressbar" aria-valuenow={progres.persen} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${progres.persen}%` }} /></div>
-            <p className="hint">Dibaca di perangkat ini, foto tidak dikirim ke layanan lain. Pertama kali butuh beberapa detik.</p>
+            <p className="hint">{azure
+              ? 'Hanya kolom Nama–Alasan dan tanggal yang dikirim ke Azure. Kop perusahaan dan tanda tangan tidak ikut dikirim.'
+              : 'Dibaca di perangkat ini, foto tidak dikirim ke layanan lain. Pertama kali butuh beberapa detik.'}</p>
           </div>
         </div>
       ) : (
@@ -54,7 +97,9 @@ function UnggahFoto({ onHasil, karyawanSemua }) {
           <label className="ms-drop" htmlFor="foto-spl">
             <span className="tile t-indigo" style={{ width: 54, height: 54, borderRadius: 16 }}><Icon name="camera" /></span>
             <b>Foto atau pilih gambar SPL</b>
-            <span className="muted">Nomor, tanggal, jam, dan nama/NIK karyawan dibaca otomatis. Anda periksa dulu sebelum disimpan.</span>
+            <span className="muted">{azure
+              ? 'Formulir SPL (SNY-FRM-HRD-006): nama, jam, dan alasan per baris dibaca otomatis, termasuk tulisan tangan. Anda periksa dulu sebelum disimpan.'
+              : 'Nomor, tanggal, jam, dan nama/NIK karyawan dibaca otomatis (tulisan cetak). Anda periksa dulu sebelum disimpan.'}</span>
           </label>
           <input className="sr" type="file" id="foto-spl" accept="image/*" capture="environment" onChange={pilih} />
           <ul className="hint ms-tips">
@@ -81,7 +126,8 @@ export default function LemburMassal({ kecil = false }) {
   const [pilih, setPilih] = useState(() => new Set());
   const [cari, setCari] = useState('');
   const [dept, setDept] = useState('');
-  const [foto, setFoto] = useState(null); // { fotoDataUrl, teks, baca }
+  const [foto, setFoto] = useState(null); // { fotoDataUrl, teks, baca, jenis }
+  const [barisSpl, setBarisSpl] = useState(null); // baris hasil Azure: { no, namaTerbaca, saran, karyawanId, ikut, jam, alasan, potongan }
   const [lihatFoto, setLihatFoto] = useState(false);
   const [konfirmasi, setKonfirmasi] = useState(false);
   const [hasil, setHasil] = useState(null);
@@ -108,7 +154,14 @@ export default function LemburMassal({ kecil = false }) {
   }, [f.tanggal, toast]);
   useEffect(() => { setData(null); muat(); }, [muat]);
 
-  const cocok = useMemo(() => new Map((foto?.baca.cocok || []).map((c) => [c.id, c])), [foto]);
+  const cocok = useMemo(() => {
+    if (barisSpl) {
+      return new Map(barisSpl.filter((b) => b.ikut && b.karyawanId).map((b) => [b.karyawanId, {
+        skor: b.yakin && b.karyawanId === b.pilihan ? 1 : 0.8, alasan: `Baris ${b.no} SPL`, baris: b.namaTerbaca,
+      }]));
+    }
+    return new Map((foto?.baca.cocok || []).map((c) => [c.id, c]));
+  }, [foto, barisSpl]);
   const daftar = useMemo(() => {
     const q = cari.trim().toLowerCase();
     return (data?.karyawan || [])
@@ -134,15 +187,40 @@ export default function LemburMassal({ kecil = false }) {
     if (b.nomor) isi.nomorSpl = b.nomor;
     if (b.keterangan) isi.alasan = b.keterangan;
     setF(isi);
+    if (r.baris) {
+      const rows = r.baris.map((x) => ({ ...x, karyawanId: x.pilihan, ikut: Boolean(x.pilihan), jam: x.selesai || isi.jam }));
+      setBarisSpl(rows);
+      setPilih(new Set(rows.filter((x) => x.ikut && x.karyawanId).map((x) => x.karyawanId)));
+      const yakin = rows.filter((x) => x.ikut).length;
+      toast(`${r.baris.length} baris terbaca, ${yakin} otomatis dicocokkan. Periksa ${r.baris.length - yakin} baris yang ragu.`);
+      return;
+    }
+    setBarisSpl(null);
     // Centang otomatis yang cocok (data karyawan bisa berubah saat tanggal berganti, muat() menyaring lagi)
     setPilih(new Set(b.cocok.map((c) => c.id)));
     toast(b.cocok.length ? `${b.cocok.length} karyawan dikenali. Periksa centangnya.` : 'Tidak ada nama/NIK yang dikenali. Centang manual.', !b.cocok.length);
   }
 
+  /** Ubah satu baris SPL dan selaraskan centang di daftar karyawan. */
+  function ubahBaris(i, patch) {
+    setBarisSpl((rows) => {
+      const baru = rows.map((x, j) => (j === i ? { ...x, ...patch } : x));
+      const lama = new Set(rows.filter((x) => x.ikut && x.karyawanId).map((x) => x.karyawanId));
+      const kini = new Set(baru.filter((x) => x.ikut && x.karyawanId).map((x) => x.karyawanId));
+      setPilih((p) => new Set([...[...p].filter((id) => !lama.has(id)), ...kini]));
+      return baru;
+    });
+  }
+  const dipakaiBaris = useMemo(() => {
+    const m = new Map();
+    (barisSpl || []).forEach((x, i) => { if (x.ikut && x.karyawanId) m.set(x.karyawanId, (m.get(x.karyawanId) || []).concat(i)); });
+    return m;
+  }, [barisSpl]);
+
   function gantiMode(m) {
     setMode(m);
     setErr('');
-    if (m === 'centang') setFoto(null);
+    if (m === 'centang') { setFoto(null); setBarisSpl(null); }
   }
 
   function cekSebelumSimpan() {
@@ -151,6 +229,10 @@ export default function LemburMassal({ kecil = false }) {
     if (f.alasan.trim().length < 3) return setErr('Isi keterangan pekerjaan.');
     if (!dipilih.length) return setErr('Centang minimal satu karyawan.');
     if (mode === 'foto' && !foto) return setErr('Foto SPL belum dibaca.');
+    const dobel = [...dipakaiBaris.values()].find((v) => v.length > 1);
+    if (dobel) return setErr(`Baris ${dobel.map((i) => barisSpl[i].no).join(' & ')} memilih karyawan yang sama. Perbaiki salah satunya.`);
+    const jamSalah = (barisSpl || []).find((x) => x.ikut && x.jam && !/^([01]\d|2[0-3]):[0-5]\d$/.test(x.jam));
+    if (jamSalah) return setErr(`Jam selesai baris ${jamSalah.no} belum benar.`);
     setErr('');
     setKonfirmasi(true);
   }
@@ -162,13 +244,20 @@ export default function LemburMassal({ kecil = false }) {
         tanggal: f.tanggal, jam: f.jam, nomorSpl: f.nomorSpl.trim() || null, alasan: f.alasan.trim(),
         karyawanIds: dipilih.map((k) => k.id), sumber: mode === 'foto' ? 'FOTO' : 'CENTANG',
         ...(mode === 'foto' && foto ? { foto: foto.fotoDataUrl, teksOcr: foto.teks.slice(0, 20000) } : {}),
+        ...(barisSpl ? {
+          rincian: barisSpl.filter((x) => x.ikut && x.karyawanId && pilih.has(x.karyawanId)).map((x) => ({
+            karyawanId: x.karyawanId,
+            jam: x.jam && x.jam !== f.jam ? x.jam : null,
+            alasan: x.alasan && x.alasan !== f.alasan ? x.alasan.slice(0, 200) : null,
+          })),
+        } : {}),
       };
       let r;
       try { r = await api('/api/lembur-massal', { method: 'POST', body }); } catch (e) { if (e.data?.hasil) r = e.data; else throw e; }
       setKonfirmasi(false);
       setHasil(r);
       setPilih(new Set());
-      if (r.tercatat) { setFoto(null); setF((x) => ({ ...x, nomorSpl: '', alasan: '' })); }
+      if (r.tercatat) { setFoto(null); setBarisSpl(null); setF((x) => ({ ...x, nomorSpl: '', alasan: '' })); }
       muat();
     } catch (e) {
       setKonfirmasi(false);
@@ -191,7 +280,7 @@ export default function LemburMassal({ kecil = false }) {
         <button type="button" role="tab" aria-selected={mode === 'foto'} className={mode === 'foto' ? 'on' : ''} onClick={() => gantiMode('foto')}>Foto SPL</button>
       </div>
 
-      {mode === 'foto' && !foto && <UnggahFoto karyawanSemua={semuaRef.current} onHasil={terimaFoto} />}
+      {mode === 'foto' && !foto && <UnggahFoto karyawanSemua={semuaRef.current} onHasil={terimaFoto} azure={batas?.pembaca?.jenis === 'AZURE' && batas.pembaca.sisa > 0} />}
 
       {mode === 'foto' && foto && (
         <div className="glass ms-foto">
@@ -200,16 +289,65 @@ export default function LemburMassal({ kecil = false }) {
             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <b>Hasil baca foto</b>
               <span className="muted" style={{ fontSize: 13 }}>
-                {foto.baca.nomor ? `No. ${foto.baca.nomor}` : 'Nomor tidak terbaca'} · {foto.baca.tanggal ? tanggalPendek(foto.baca.tanggal) : 'tanggal tidak terbaca'} · {foto.baca.jam ? `s/d ${foto.baca.jam}` : 'jam tidak terbaca'}
+                {foto.jenis === 'AZURE' ? '' : `${foto.baca.nomor ? `No. ${foto.baca.nomor}` : 'Nomor tidak terbaca'} · `}{foto.baca.tanggal ? tanggalPendek(foto.baca.tanggal) : 'tanggal tidak terbaca'} · {foto.baca.jam ? `s/d ${foto.baca.jam}` : 'jam tidak terbaca'}
               </span>
-              <span className={`badge ${foto.baca.cocok.length ? 'b-ok' : 'b-warn'}`} style={{ alignSelf: 'flex-start' }}>{foto.baca.cocok.length} karyawan dikenali</span>
+              {foto.jenis === 'AZURE' && foto.baris ? (() => {
+                const yakin = foto.baris.filter((r) => r.yakin).length;
+                return <span className={`badge ${yakin === foto.baris.length ? 'b-ok' : 'b-warn'}`} style={{ alignSelf: 'flex-start' }}>{yakin} dari {foto.baris.length} baris cocok otomatis</span>;
+              })() : <span className={`badge ${foto.baca.cocok.length ? 'b-ok' : 'b-warn'}`} style={{ alignSelf: 'flex-start' }}>{foto.baca.cocok.length} karyawan dikenali</span>}
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <button type="button" className="link" onClick={() => setFoto(null)}>Ganti foto</button>
+                <button type="button" className="link" onClick={() => { setFoto(null); setBarisSpl(null); }}>Ganti foto</button>
                 <details><summary className="link" style={{ cursor: 'pointer' }}>Teks terbaca</summary><pre className="ms-ocr">{foto.teks || '(kosong)'}</pre></details>
               </div>
             </div>
           </div>
-          <p className="hint">Periksa kembali: hapus centang yang salah, centang yang terlewat. Badge kuning berarti nama hanya mirip.</p>
+          {foto.jenis === 'AZURE'
+            ? <p className="hint">Dibaca Azure{foto.pemakaian ? ` · kuota bulan ini ${foto.pemakaian.jumlah}/${foto.pemakaian.batas}` : ''}. Periksa tiap baris di bawah: baris kuning belum dicocokkan otomatis.</p>
+            : <p className="hint">Periksa kembali: hapus centang yang salah, centang yang terlewat. Badge kuning berarti nama hanya mirip.</p>}
+        </div>
+      )}
+
+      {mode === 'foto' && foto && barisSpl && (
+        <div className="glass ms-list">
+          <div className="ms-tools" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <b>Baris SPL ({barisSpl.filter((x) => x.ikut && x.karyawanId).length}/{barisSpl.length} dipilih)</b>
+            <span className="muted" style={{ fontSize: 13 }}>Kiri: tulisan di SPL · kanan: karyawan yang dicatat</span>
+          </div>
+          {barisSpl.map((x, i) => {
+            const k = (data?.karyawan || []).find((y) => y.id === x.karyawanId);
+            const dobel = x.ikut && x.karyawanId && (dipakaiBaris.get(x.karyawanId) || []).length > 1;
+            const ragu = !x.karyawanId || (x.karyawanId !== x.pilihan);
+            return (
+              <div key={x.no} className={`ms-spl${x.ikut ? ' on' : ''}${ragu && !x.karyawanId ? ' ragu' : ''}`}>
+                <input type="checkbox" aria-label={`Ikutkan baris ${x.no}`} checked={x.ikut} disabled={!x.karyawanId || Boolean(k?.sudahTap)} onChange={() => ubahBaris(i, { ikut: !x.ikut })} />
+                <span className="no">{x.no}</span>
+                <span className="tulisan">
+                  {x.potongan && <img src={x.potongan} alt={`Tulisan nama baris ${x.no}`} />}
+                  <span className="muted">terbaca: {x.namaTerbaca}</span>
+                </span>
+                <span className="pilih">
+                  <select className="input" value={x.karyawanId || ''} aria-label={`Karyawan untuk baris ${x.no}`} onChange={(e) => { const id = Number(e.target.value) || null; ubahBaris(i, { karyawanId: id, ikut: Boolean(id) }); }}>
+                    <option value="">— pilih karyawan —</option>
+                    <optgroup label="Saran">
+                      {x.saran.map((sr) => <option key={sr.id} value={sr.id}>{sr.nama} ({Math.round(sr.skor * 100)}%)</option>)}
+                    </optgroup>
+                    <optgroup label="Semua karyawan">
+                      {(data?.karyawan || []).filter((y) => !x.saran.some((sr) => sr.id === y.id)).map((y) => <option key={y.id} value={y.id}>{y.nama} · {y.nik}</option>)}
+                    </optgroup>
+                  </select>
+                  <span className="info">
+                    {k?.sudahTap ? <span className="badge b-mute">Sudah tap {k.sudahTap.jam}</span>
+                      : dobel ? <span className="badge b-err">Dipilih di 2 baris</span>
+                        : x.karyawanId && x.karyawanId === x.pilihan ? <span className="badge b-ok">Cocok</span>
+                          : x.karyawanId ? <span className="badge b-ink">Dipilih manual</span>
+                            : <span className="badge b-warn">Perlu dipilih</span>}
+                    <input className="input jam" type="time" value={x.jam || ''} aria-label={`Jam selesai baris ${x.no}`} onChange={(e) => ubahBaris(i, { jam: e.target.value })} />
+                    {x.alasan && <span className="muted alasan" title={x.alasan}>{x.alasan}</span>}
+                  </span>
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 

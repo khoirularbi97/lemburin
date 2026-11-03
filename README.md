@@ -196,8 +196,10 @@ tercatat atas nama yang menginput, dan karyawan menerima notifikasi.
 
 1. **Centang daftar**: pilih tanggal, jam selesai, No. SPL (opsional), pekerjaan, lalu centang karyawan
    (ada pencarian, filter departemen, *Pilih semua*). Yang sudah tap di tanggal itu otomatis tidak bisa dipilih.
-2. **Foto SPL**: foto/pilih gambar SPL → dibaca otomatis (nomor, tanggal, jam, keterangan, NIK & nama)
-   → **preview**: periksa centang (badge hijau = NIK cocok, kuning = nama hanya mirip) → **Simpan**.
+2. **Foto SPL**: foto/pilih gambar SPL → dibaca otomatis → **preview** per baris SPL: potongan tulisan
+   nama, hasil baca, karyawan yang dicocokkan (badge hijau *Cocok* = otomatis dicentang, kuning *Perlu dipilih*
+   = pilih dari 3 saran atau daftar semua karyawan), jam selesai & pekerjaan per orang → **Simpan**.
+   Tanda "sama dengan atas" (garis, tanda kutip, kosong) diisi dari baris di atasnya.
    Foto disimpan sebagai bukti dan bisa dibuka admin di Rekap → detail → *Lihat foto SPL*.
 
 Aturan: petugas hanya bisa memilih karyawan di departemen area-nya (area *Semua* = semua karyawan)
@@ -213,20 +215,48 @@ Foto otomatis dihapus setelah `FOTO_SPL_SIMPAN_BULAN` bulan (bawaan 13); data le
 Cara mengaktifkan (sekali):
 1. Pastikan project Neon ada di region yang mendukung Object Storage
    (`aws-ap-southeast-1` Singapore, `aws-us-east-1/2`, `aws-eu-central-1`).
-2. Buat bucket privat bernama `foto-spl`: `neon buckets create foto-spl`
-   (CLI: `npm i -g neonctl`, lalu `neon auth`).
+2. Buat bucket privat `foto-spl` lewat **Neon Console**: buka project → pilih branch (production/main)
+   → tab **Object storage** → **New bucket** → nama `foto-spl`, akses **private** → **Create**.
+   (Tidak perlu CLI. Langkah 4 di bawah juga otomatis membuat bucket kalau belum ada.)
 3. Ambil kredensial: Neon Console → **Connect** → tab **Storage** → *Copy credentials*
    (atau Settings → Credentials → *Create credential* dengan scope `storage:read` + `storage:write`).
    Secret hanya tampil sekali, simpan baik-baik.
-4. Isi env di Render: `AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-   `STORAGE_BUCKET=foto-spl`. Log Render akan menulis `Foto SPL: Neon Object Storage`.
+4. Isi lima env itu di `server/.env`, lalu cek dari komputer: `cd server` → `npm run storage:cek`.
+   Harus muncul `✓ Uji tulis, baca, dan hapus berhasil`.
+5. Isi env yang sama di Render: `AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`,
+   `AWS_SECRET_ACCESS_KEY`, `STORAGE_BUCKET=foto-spl`. Log Render akan menulis `Foto SPL: Neon Object Storage`.
 
 Tanpa env ini aplikasi tetap jalan dan foto disimpan di kolom database (cocok untuk uji coba).
 Foto hanya bisa dibuka lewat API lemburin (admin, atau petugas yang mengunggahnya); bucket tidak publik.
 Catatan: aturan *lifecycle* di Neon belum dijalankan otomatis, karena itu penghapusan foto lama
 dilakukan oleh server lemburin sendiri (saat bangun dan tiap 12 jam).
 
-Pembaca foto memakai **tesseract.js** yang berjalan di perangkat (foto tidak dikirim ke layanan lain).
+### Pembaca SPL tulisan tangan (Azure AI Vision)
+
+SPL tulisan tangan (format SNY-FRM-HRD-006) dibaca dengan **Azure AI Vision – Read**, tier gratis
+**F0: 5.000 gambar/bulan** (data tidak dipakai Microsoft untuk melatih model). Satu SPL = 1 gambar.
+
+Yang dikirim ke Azure **hanya potongan**: baris Hari/Tanggal + kolom NAMA s/d ALASAN, hitam-putih.
+Kop perusahaan, kolom No, kolom tanda tangan, dan kolom pengesahan **dipotong di HP** sebelum dikirim.
+Kunci Azure hanya ada di server (Render), tidak pernah sampai ke aplikasi.
+
+Cara mengaktifkan (sekali):
+1. Masuk [portal.azure.com](https://portal.azure.com) (akun Microsoft; Azure for Students tidak perlu kartu kredit).
+2. **Create a resource** → cari **Computer Vision** → **Create**.
+   Region: **Southeast Asia** (atau East US / West Europe), Pricing tier: **Free F0**, nama bebas → **Review + create**.
+   (Satu langganan hanya boleh punya satu resource F0 Computer Vision.)
+3. Buka resource → **Keys and Endpoint** → salin **KEY 1** dan **Endpoint**.
+4. Di Render → service backend → **Environment**: isi `AZURE_VISION_ENDPOINT` (mis.
+   `https://nama-anda.cognitiveservices.azure.com`) dan `AZURE_VISION_KEY`. Opsional
+   `AZURE_VISION_BATAS_BULANAN` (bawaan 4500, supaya tidak pernah lewat kuota gratis).
+5. Deploy ulang. Di layar Foto SPL akan tertulis *Pembaca: Azure (sisa N bulan ini)*.
+
+Pemakaian dihitung per bulan di tabel `PemakaianOcr`. Kalau batas tercapai, Azure mati atau tabel SPL
+tidak terdeteksi (foto terlalu miring/terpotong), aplikasi otomatis kembali ke pembaca lokal di bawah.
+Tips foto: seluruh tabel masuk bingkai, kertas rata, cahaya cukup; kemiringan sampai ±4° diluruskan otomatis.
+Hasil baca tetap **wajib diperiksa** di preview sebelum disimpan.
+
+Kalau Azure belum diatur, pembaca foto memakai **tesseract.js** yang berjalan di perangkat (foto tidak dikirim ke layanan lain).
 Filenya (±16 MB, termasuk data bahasa Indonesia & Inggris) disalin otomatis ke `client/public/ocr`
 saat `npm run dev`/`build` dan hanya diunduh saat fitur Foto SPL pertama kali dipakai.
 Akurasi terbaik untuk SPL ketikan/cetak yang mencantumkan NIK; tulisan tangan biasanya perlu dicentang manual.
@@ -395,6 +425,9 @@ Semua endpoint selain `/health` dan `/api/auth/login` butuh header
 | POST/DELETE | `/api/portal/push/langganan` | karyawan | Daftar/hapus perangkat notifikasi |
 | GET | `/api/dashboard` | admin | Ringkasan dashboard |
 | GET/POST/PATCH | `/api/pengguna`, `/api/pengguna/:id` | admin | Kelola akun |
+| GET | `/api/lembur-massal/batas` | admin, petugas | Batas tanggal, daftar karyawan, pembaca (Azure/lokal) |
+| POST | `/api/lembur-massal/baca-spl` | admin, petugas | Baca potongan SPL lewat Azure (kunci di server) |
+| POST | `/api/lembur-massal` | admin, petugas | Simpan lembur massal (+ jam/alasan per karyawan, foto SPL) |
 
 Respons `POST /api/scan`:
 - `201` tap tercatat

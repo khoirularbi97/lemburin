@@ -50,3 +50,10 @@ services:
         value: foto-spl
       - key: FOTO_SPL_SIMPAN_BULAN
         value: "13"
+      # Pembaca SPL tulisan tangan (Azure AI Vision Read, tier gratis F0)
+      - key: AZURE_VISION_ENDPOINT
+        sync: false
+      - key: AZURE_VISION_KEY
+        sync: false
+      - key: AZURE_VISION_BATAS_BULANAN
+        value: "4500"
