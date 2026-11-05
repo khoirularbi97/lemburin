@@ -231,6 +231,26 @@ Foto hanya bisa dibuka lewat API lemburin (admin, atau petugas yang mengunggahny
 Catatan: aturan *lifecycle* di Neon belum dijalankan otomatis, karena itu penghapusan foto lama
 dilakukan oleh server lemburin sendiri (saat bangun dan tiap 12 jam).
 
+### Pembaca SPL tulisan tangan (Groq) — gratis, tanpa kartu
+
+Urutan pembaca: **Groq → Gemini → Azure → pembaca lokal di HP** (yang pertama diatur yang dipakai;
+kalau gagal, aplikasi kembali ke pembaca lokal). Groq memakai model vision (bawaan `qwen/qwen3.8-27b`)
+dan langsung mengembalikan isi tabel per baris; pencocokan nama ke data karyawan tetap di HP.
+Yang dikirim hanya baris Hari/Tanggal + kolom NAMA s/d ALASAN, hitam-putih. Groq tidak menyimpan isi
+permintaan secara bawaan.
+
+Cara mengaktifkan:
+1. Buka [console.groq.com](https://console.groq.com) → **Sign in** (Google / GitHub / email). Tidak perlu kartu.
+2. Menu **API Keys** → **Create API Key** → beri nama `lemburin` → salin kuncinya (`gsk_...`, hanya tampil sekali).
+3. (Disarankan) **Settings → Data Controls**: aktifkan *Zero Data Retention* kalau tersedia untuk akun Anda.
+4. Cek batas gratis model di **Settings → Limits**. Isi `GROQ_BATAS_HARIAN` sedikit di bawah batas
+   permintaan per hari (RPD) model itu.
+5. Render → Environment: isi `GROQ_API_KEY` (opsional `GROQ_MODEL`, `GROQ_BATAS_HARIAN`) → deploy.
+6. Di layar Foto SPL akan tertulis *Dibaca Groq · kuota hari ini N/100*.
+
+Kalau model bawaan sudah tidak ada, error-nya menyebut "Ganti GROQ_MODEL": pilih model lain yang
+menerima gambar di halaman **Docs → Vision** Groq.
+
 ### Pembaca SPL tulisan tangan (Gemini API, berbayar) — disarankan
 
 Kalau `GEMINI_API_KEY` diisi, SPL dibaca **Gemini** (didahulukan dari Azure). Gemini langsung
@@ -454,7 +474,7 @@ Semua endpoint selain `/health` dan `/api/auth/login` butuh header
 | GET | `/api/dashboard` | admin | Ringkasan dashboard |
 | GET/POST/PATCH | `/api/pengguna`, `/api/pengguna/:id` | admin | Kelola akun |
 | GET | `/api/lembur-massal/batas` | admin, petugas | Batas tanggal, daftar karyawan, pembaca (Azure/lokal) |
-| POST | `/api/lembur-massal/baca-spl` | admin, petugas | Baca potongan SPL lewat Gemini/Azure (kunci di server) |
+| POST | `/api/lembur-massal/baca-spl` | admin, petugas | Baca potongan SPL lewat Groq/Gemini/Azure (kunci di server) |
 | POST | `/api/lembur-massal` | admin, petugas | Simpan lembur massal (+ jam/alasan per karyawan, foto SPL) |
 
 Respons `POST /api/scan`:

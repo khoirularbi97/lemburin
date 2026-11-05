@@ -10,6 +10,7 @@ import { buatTapManual, liburPada, wajibTanggalManual } from '../lib/tapManual.j
 import { kabariTapTercatat } from '../lib/notifikasi.js';
 import { azureAktif, bacaGambar, pemakaian } from '../lib/azureOcr.js';
 import { bacaSplGemini, geminiAktif, modelGemini, pemakaianGemini } from '../lib/geminiOcr.js';
+import { bacaSplGroq, groqAktif, modelGroq, pemakaianGroq } from '../lib/groqOcr.js';
 import { bacaFoto as ambilFoto, bersihkanFotoLama, buangFoto, MASA_SIMPAN_BULAN, simpanFoto } from '../lib/fotoSpl.js';
 
 const router = Router();
@@ -26,13 +27,14 @@ router.get('/batas', ah(async (req, res) => {
   res.json({
     ...batasManual(),
     masaSimpanFotoBulan: MASA_SIMPAN_BULAN,
-    // Urutan: Gemini (berbayar) → Azure → pembaca lokal di HP
-    pembaca: geminiAktif ? { jenis: 'GEMINI', model: modelGemini, ...(await pemakaianGemini()) }
+    // Urutan: Groq → Gemini → Azure → pembaca lokal di HP
+    pembaca: groqAktif ? { jenis: 'GROQ', model: modelGroq, ...(await pemakaianGroq()) }
+      : geminiAktif ? { jenis: 'GEMINI', model: modelGemini, ...(await pemakaianGemini()) }
       : azureAktif ? { jenis: 'AZURE', periode: 'bulan', ...(await pemakaian()) } : { jenis: 'LOKAL' },
   });
 }));
 
-// Baca potongan kolom SPL (Nama–Alasan + strip tanggal) lewat Gemini atau Azure.
+// Baca potongan kolom SPL (Nama–Alasan + strip tanggal) lewat Groq, Gemini, atau Azure.
 // Batas sederhana per pengguna supaya tidak menghabiskan kuota.
 const terakhirBaca = new Map();
 router.post('/baca-spl', ah(async (req, res) => {
@@ -44,8 +46,14 @@ router.post('/baca-spl', ah(async (req, res) => {
   const t = terakhirBaca.get(req.user.id) || 0;
   if (Date.now() - t < 3000) throw new HttpError(429, 'Tunggu sebentar sebelum membaca lagi.');
   terakhirBaca.set(req.user.id, Date.now());
+  if (groqAktif || geminiAktif) {
+    if (!jumlahBaris) throw new HttpError(400, 'jumlahBaris wajib. Muat ulang aplikasi.');
+  }
+  if (groqAktif) {
+    const hasil = await bacaSplGroq(buf, `image/${m[1]}`, jumlahBaris);
+    return res.json({ ...hasil, pemakaian: await pemakaianGroq() });
+  }
   if (geminiAktif) {
-    if (!jumlahBaris) throw new HttpError(400, 'jumlahBaris wajib untuk pembaca Gemini. Muat ulang aplikasi.');
     const hasil = await bacaSplGemini(buf, `image/${m[1]}`, jumlahBaris);
     return res.json({ ...hasil, pemakaian: await pemakaianGemini() });
   }

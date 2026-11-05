@@ -64,3 +64,10 @@ services:
         value: gemini-3.8-flash
       - key: GEMINI_BATAS_HARIAN
         value: "100"
+      # Pembaca SPL tulisan tangan (Groq, gratis; didahulukan dari Gemini & Azure)
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: qwen/qwen3.8-27b
+      - key: GROQ_BATAS_HARIAN
+        value: "100"

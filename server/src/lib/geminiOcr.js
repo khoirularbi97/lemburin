@@ -51,7 +51,7 @@ const SKEMA = {
   required: ['tanggal', 'baris'],
 };
 
-function perintah(jumlahBaris) {
+export function perintah(jumlahBaris) {
   return [
     'Gambar ini potongan formulir Surat Perintah Lembur (SPL) yang ditulis tangan, dari sebuah pabrik di Indonesia.',
     'Bagian paling atas berisi baris "Hari" dan "Tanggal".',
@@ -128,22 +128,24 @@ export async function bacaSplGemini(buf, mime, jumlahBaris) {
   try { isi = JSON.parse(teks); } catch {
     throw new HttpError(502, `Gemini tidak mengembalikan tabel (${kandidat?.finishReason || 'jawaban kosong'}). Coba foto ulang.`, { kode: 'GEMINI_GAGAL' });
   }
-  // Rapikan: tepat jumlahBaris baris, urut menurut "no"
-  const s = (v) => (typeof v === 'string' ? v.trim() : '');
+  const u = json.usageMetadata || {};
+  return {
+    jenis: 'GEMINI',
+    model: MODEL,
+    ...rapikanTabel(isi, jumlahBaris),
+    token: { masuk: u.promptTokenCount || 0, keluar: (u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0) },
+  };
+}
+
+/** Rapikan jawaban model: tepat jumlahBaris baris, urut menurut "no". Dipakai Gemini & Groq. */
+export function rapikanTabel(isi, jumlahBaris) {
+  const s = (v) => (typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '');
   const baris = Array.from({ length: jumlahBaris }, (_, i) => ({ no: i + 1, nama: '', bagian: '', mulai: '', selesai: '', alasan: '' }));
-  (Array.isArray(isi.baris) ? isi.baris : []).forEach((r, i) => {
+  (Array.isArray(isi?.baris) ? isi.baris : []).forEach((r, i) => {
     // Nomor di luar tabel dibuang; tanpa nomor → pakai urutan
     const no = Number.isInteger(r?.no) ? r.no : i + 1;
     if (no < 1 || no > jumlahBaris) return;
     baris[no - 1] = { no, nama: s(r.nama), bagian: s(r.bagian), mulai: s(r.mulai), selesai: s(r.selesai), alasan: s(r.alasan) };
   });
-  const u = json.usageMetadata || {};
-  return {
-    jenis: 'GEMINI',
-    model: MODEL,
-    hari: s(isi.hari),
-    tanggal: s(isi.tanggal),
-    baris,
-    token: { masuk: u.promptTokenCount || 0, keluar: (u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0) },
-  };
+  return { hari: s(isi?.hari), tanggal: s(isi?.tanggal), baris };
 }

@@ -16,7 +16,7 @@ function kemarin(min) {
 
 /* ---------- Tahap foto SPL ---------- */
 
-const NAMA_PEMBACA = { GEMINI: 'Gemini', AZURE: 'Azure' };
+const NAMA_PEMBACA = { GROQ: 'Groq', GEMINI: 'Gemini', AZURE: 'Azure' };
 
 /** Baca SPL lewat Gemini/Azure: potong kolom → kirim → petakan baris. null = pakai pembaca lokal. */
 async function bacaLewatAwan(file, karyawan, setProgres, toast, jenis) {
@@ -38,8 +38,8 @@ async function bacaLewatAwan(file, karyawan, setProgres, toast, jenis) {
   }
   setProgres({ persen: 90, tahap: 'Mencocokkan nama karyawan…' });
   let peta; let teks;
-  if (r.jenis === 'GEMINI') {
-    // Gemini mengembalikan isi per baris tabel langsung
+  if (r.jenis === 'GEMINI' || r.jenis === 'GROQ') {
+    // Groq/Gemini mengembalikan isi per baris tabel langsung
     const sel = Array.from({ length: jumlahBaris }, (_, i) => {
       const b = r.baris[i] || {};
       return { nama: b.nama || '', bagian: b.bagian || '', mulai: b.mulai || '', selesai: b.selesai || '', alasan: b.alasan || '' };
@@ -300,7 +300,7 @@ export default function LemburMassal({ kecil = false }) {
         <button type="button" role="tab" aria-selected={mode === 'foto'} className={mode === 'foto' ? 'on' : ''} onClick={() => gantiMode('foto')}>Foto SPL</button>
       </div>
 
-      {mode === 'foto' && !foto && <UnggahFoto karyawanSemua={semuaRef.current} onHasil={terimaFoto} awan={['GEMINI', 'AZURE'].includes(batas?.pembaca?.jenis) && batas.pembaca.sisa > 0 ? batas.pembaca.jenis : null} />}
+      {mode === 'foto' && !foto && <UnggahFoto karyawanSemua={semuaRef.current} onHasil={terimaFoto} awan={['GROQ', 'GEMINI', 'AZURE'].includes(batas?.pembaca?.jenis) && batas.pembaca.sisa > 0 ? batas.pembaca.jenis : null} />}
 
       {mode === 'foto' && foto && (
         <div className="glass ms-foto">
