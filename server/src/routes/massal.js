@@ -5,7 +5,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ah, HttpError } from '../lib/util.js';
-import { batasManual, hitungLembur, jamWIB, keTanggalDb, polaTanggal } from '../lib/lembur.js';
+import { batasManual, hitungLembur, jamWIB, keTanggalDb, polaTanggal, upahSejam } from '../lib/lembur.js';
+import { ambilAturan } from '../lib/aturanLembur.js';
 import { buatTapManual, liburPada, wajibTanggalManual } from '../lib/tapManual.js';
 import { kabariTapTercatat } from '../lib/notifikasi.js';
 import { azureAktif, bacaGambar, pemakaian } from '../lib/azureOcr.js';
@@ -72,17 +73,21 @@ router.get('/karyawan', ah(async (req, res) => {
     liburPada(prisma, tanggal),
   ]);
   const tapPer = new Map(taps.map((t) => [t.karyawanId, t]));
-  const contoh = hitungLembur({ upahBulanan: 1730, tanggal, libur });
+  const aturan = await ambilAturan();
+  const contoh = hitungLembur({ upahBulanan: 1730, tanggal, libur, aturan });
   res.json({
     tanggal,
     hari: { jenis: contoh.jenisHari, label: contoh.label, keterangan: contoh.keterangan, jam: contoh.jamHitung },
+    // Untuk pratinjau hitungan jam aktual di layar (hasil akhir tetap dihitung server)
+    aturan,
+    libur: libur.has(tanggal) ? libur.get(tanggal) || 'Hari libur' : null,
     lingkup: lingkup(req.user).departemen || 'Semua',
     karyawan: list.map((k) => {
       const t = tapPer.get(k.id);
       return {
         id: k.id, nik: k.nik, nama: k.nama, departemen: k.departemen, jabatan: k.jabatan,
         // Upah hanya untuk admin; petugas cukup melihat jam hitung
-        ...(admin ? { nominal: hitungLembur({ upahBulanan: k.upahBulanan, tanggal, libur }).nominal } : {}),
+        ...(admin ? { nominal: hitungLembur({ upahBulanan: k.upahBulanan, tanggal, libur, aturan }).nominal, upahSejam: upahSejam(k.upahBulanan) } : {}),
         sudahTap: t ? { jam: jamWIB(t.waktuTap), manual: t.manual, oleh: t.petugas.username } : null,
       };
     }),
@@ -92,6 +97,8 @@ router.get('/karyawan', ah(async (req, res) => {
 const skema = z.object({
   tanggal: z.string().refine(polaTanggal, 'Format tanggal harus YYYY-MM-DD'),
   jam: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Format jam harus HH:mm'),
+  // Jam mulai lembur: kalau diisi, lembur dihitung jam aktual mulai–selesai (PP 35/2021)
+  mulai: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Format jam mulai harus HH:mm').optional().nullable(),
   nomorSpl: z.string().trim().max(60).optional().nullable(),
   alasan: z.string().trim().min(3, 'Isi keterangan pekerjaan, minimal 3 huruf').max(200),
   karyawanIds: z.array(z.coerce.number().int().positive()).min(1, 'Pilih minimal satu karyawan').max(MAKS_KARYAWAN),
@@ -102,6 +109,7 @@ const skema = z.object({
   rincian: z.array(z.object({
     karyawanId: z.coerce.number().int().positive(),
     jam: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional().nullable(),
+    mulai: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional().nullable(),
     alasan: z.string().trim().max(200).optional().nullable(),
   })).max(MAKS_KARYAWAN).optional(),
 });
@@ -167,13 +175,15 @@ router.post('/', ah(async (req, res) => {
     try {
       const r2 = rinci.get(id);
       const { tap } = await buatTapManual(prisma, {
-        karyawan: k, tanggal: d.tanggal, jam: r2?.jam || d.jam, alasan: keterangan(r2?.alasan), adminId: req.user.id, splId: spl.id,
+        karyawan: k, tanggal: d.tanggal, jam: r2?.jam || d.jam, mulai: r2?.mulai || d.mulai || null,
+        alasan: keterangan(r2?.alasan), adminId: req.user.id, splId: spl.id, sumber: 'MASSAL',
       });
       kabariTapTercatat(k, tap, { manual: true });
-      hasil.push({ ...r, status: 'OK', jamHitung: tap.jamHitung, ...(req.user.role === 'ADMIN' ? { nominal: tap.nominal } : {}) });
+      hasil.push({ ...r, status: 'OK', jamHitung: tap.jamHitung, menitLembur: tap.menitLembur ?? null, ...(req.user.role === 'ADMIN' ? { nominal: tap.nominal } : {}) });
     } catch (e) {
       if (e.code === 'P2002') hasil.push({ ...r, status: 'SUDAH_TAP', pesan: 'Sudah punya tap di tanggal itu.' });
       else if (e.status) hasil.push({ ...r, status: e.extra?.kode === 'SUDAH_TAP' ? 'SUDAH_TAP' : 'GAGAL', pesan: e.message });
+      else if (e.message?.startsWith('Jam mulai')) hasil.push({ ...r, status: 'GAGAL', pesan: e.message });
       else throw e;
     }
   }

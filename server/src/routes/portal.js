@@ -14,6 +14,7 @@ import { liburPada, tapPada } from '../lib/tapManual.js';
 import { buatSlip, ringkasTap } from '../lib/slip.js';
 import { infoPush, kirimPushRinci, statusFcm } from '../lib/notifikasi.js';
 import { buatJwtKaryawan, wajibKaryawan, wajibSandiSendiri } from '../middleware/auth.js';
+import portalMandiri, { bentukLemburAktual } from './portalMandiri.js';
 
 const router = Router();
 
@@ -36,9 +37,12 @@ function profil(k) {
 }
 
 function bentukTap(t) {
+  const a = t.metode === 'AKTUAL' ? bentukLemburAktual(t) : {};
   return {
     id: t.id, tanggal: dariTanggalDb(t.tanggal), jam: jamWIB(t.waktuTap), jenisHari: t.jenisHari,
     jamHitung: t.jamHitung, upahSejam: t.upahSejam, nominal: t.nominal, manual: t.manual,
+    metode: t.metode || 'TETAP', sumber: t.sumber || null,
+    ...(t.metode === 'AKTUAL' ? { jamMulai: a.jamMulai, jamSelesai: a.jamSelesai, menitLembur: a.menitLembur, rincian: a.rincian } : {}),
   };
 }
 
@@ -108,6 +112,9 @@ router.post('/ganti-sandi', ah(async (req, res) => {
 
 // Sisa rute hanya setelah sandi awal diganti
 router.use(wajibSandiSendiri);
+
+// Tap mandiri: wajah + QR dinamis petugas → tap in / tap out
+router.use(portalMandiri);
 
 router.get('/ringkasan', ah(async (req, res) => {
   const k = req.karyawan;

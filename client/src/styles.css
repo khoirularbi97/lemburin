@@ -371,3 +371,41 @@ body:has(.tabs) .toast { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); 
   .ms-spl { grid-template-columns: 24px 22px minmax(0, 1fr); }
   .ms-spl .pilih { grid-column: 2 / -1; }
 }
+
+/* ---------- tap mandiri ---------- */
+.tabs.t5 { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; padding: 5px; }
+.tabs.t5 a { flex-direction: column; gap: 3px; min-height: 56px; font-size: 11px; padding: 0 2px; }
+.chk { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; font-weight: 600; line-height: 1.45; cursor: pointer; }
+.chk input { width: 22px; height: 22px; accent-color: var(--teal); flex-shrink: 0; margin: 1px 0 0; }
+.wajah-info { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.wajah-info b { color: var(--ink); }
+.wajah { display: flex; flex-direction: column; gap: 12px; }
+.wajah-bingkai { position: relative; border-radius: 26px; overflow: hidden; aspect-ratio: 3 / 4; max-height: 62vh; background: radial-gradient(circle at 50% 45%, #1C2450 0, #0B0E1E 75%); box-shadow: 0 30px 40px -24px rgba(11,14,30,.8); }
+.wajah-bingkai video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
+.wajah-oval { position: absolute; left: 50%; top: 46%; width: 62%; aspect-ratio: 3 / 4; transform: translate(-50%, -50%); border-radius: 50%; border: 4px solid rgba(255,255,255,.55); box-shadow: 0 0 0 999px rgba(11,14,30,.45); transition: border-color .2s; pointer-events: none; }
+.wajah-bingkai.ada .wajah-oval { border-color: var(--tealGlow); }
+.wajah-bingkai.l-toleh .wajah-oval { border-color: #FFC861; }
+.wajah-bingkai.l-selesai .wajah-oval { border-color: var(--tealGlow); border-width: 6px; }
+.wajah-muat { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; color: #E3E6F5; font-weight: 600; }
+.wajah-petunjuk { margin: 0; text-align: center; font-size: 17px; font-weight: 800; min-height: 2.6em; }
+.wajah-langkah { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.wajah-langkah li { font-size: 11.5px; font-weight: 700; text-align: center; padding: 8px 4px; border-radius: 12px; background: #E9EBF3; color: var(--muted); }
+.wajah-langkah li.on { background: var(--amberSoft); color: var(--amberInk); }
+.wajah-langkah li.ok { background: var(--tealSoft); color: var(--tealInk); }
+.langkah-mini { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.langkah-mini b { color: var(--ink); }
+.tap-hasil { gap: 14px; }
+.qr-mandiri { border-radius: 26px; padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.qr-mandiri img, .qr-kosong { width: min(100%, 340px); aspect-ratio: 1; border-radius: 16px; background: #fff; display: flex; align-items: center; justify-content: center; image-rendering: pixelated; }
+.qr-waktu { width: min(100%, 340px); height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.qr-waktu i { display: block; height: 100%; background: linear-gradient(90deg, var(--tealGlow), var(--teal)); transition: width .25s linear; }
+.kartu-wajah { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.kartu-wajah > div { border-radius: 20px; padding: 14px; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px 14px; align-items: start; }
+.kartu-wajah .t { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.kartu-wajah .t span { font-size: 12.5px; color: var(--muted); }
+.kartu-wajah .rowacts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.foto-wajah { width: 96px; height: 96px; border-radius: 16px; object-fit: cover; background: #E9EBF3; display: block; }
+.ms-jam2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ms-pratinjau { font-size: 12.5px; color: var(--muted); }
+.list .li.baru { background: linear-gradient(90deg, var(--tealSoft), transparent); border-radius: 12px; animation: kedip 1s ease-in-out 3; }
+@keyframes kedip { 50% { background: var(--amberSoft); } }

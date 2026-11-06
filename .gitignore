@@ -7,3 +7,4 @@ dev-dist
 .DS_Store
 # Disalin otomatis dari node_modules saat build (npm run ocr)
 client/public/ocr/
+client/public/wajah/

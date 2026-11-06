@@ -9,11 +9,13 @@ const MENU = [
   ['/admin', 'Dashboard', 'grid', true],
   ['/admin/rekap', 'Rekap lembur', 'chart'],
   ['/admin/massal', 'Input lembur massal', 'plus'],
+  ['/admin/mandiri', 'Tap mandiri & wajah', 'user'],
   ['/admin/pengajuan', 'Pengajuan tap', 'clock'],
   ['/admin/karyawan', 'Data karyawan & ID card', 'users'],
   ['/admin/libur', 'Kalender hari libur', 'cal'],
   ['/admin/pengguna', 'Pengguna & petugas', 'shield'],
   ['/scan', 'Buka scanner', 'scan'],
+  ['/qr', 'Tampilkan QR mandiri', 'qr'],
 ];
 
 export default function AdminLayout() {

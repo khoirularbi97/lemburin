@@ -231,6 +231,41 @@ Foto hanya bisa dibuka lewat API lemburin (admin, atau petugas yang mengunggahny
 Catatan: aturan *lifecycle* di Neon belum dijalankan otomatis, karena itu penghapusan foto lama
 dilakukan oleh server lemburin sendiri (saat bangun dan tiap 12 jam).
 
+### Tap lembur mandiri (portal karyawan) + hitungan PP 35/2021
+
+Karyawan bisa tap in / tap out sendiri dari portal (menu **Tap**):
+
+1. **Verifikasi wajah** di HP karyawan: lihat lurus → toleh ke kiri dan kanan → lurus lagi
+   (pemeriksaan "wajah hidup", supaya foto diam tidak lolos). Wajah diubah jadi 128 angka di HP
+   (face-api, model ±7 MB diunduh sekali); **saat tap foto tidak dikirim**, hanya angka itu.
+2. **Pindai QR dinamis** di HP petugas/admin (menu **QR** di aplikasi petugas). QR ditandatangani server
+   dan berganti tiap 10 detik (hanya QR yang tampil + satu sebelumnya diterima); hanya karyawan area petugas itu
+   yang diterima. Di bawah QR, petugas melihat **daftar siapa saja yang tap lewat QR-nya hari ini** (diperbarui
+   tiap 5 detik) — kalau ada nama yang orangnya tidak ada di depannya, QR diteruskan lewat chat: laporkan ke HRD.
+3. Tap pertama = **tap in** (mulai lembur), tap kedua = **tap out**. Lembur dihitung **jam aktual**:
+
+| Hari | Tarif (PP 35/2021 Pasal 31) |
+|---|---|
+| Hari kerja | jam ke-1 × 1,5, jam berikutnya × 2 · dihitung mulai **jam pulang normal** · peringatan bila > 4 jam |
+| Libur, pola 5 hari kerja | jam 1–8 × 2, jam 9 × 3, jam 10–12 × 4 |
+| Libur, pola 6 hari kerja | jam 1–7 × 2, jam 8 × 3, jam 9–11 × 4 |
+| Pola 6, libur resmi di hari kerja terpendek | jam 1–5 × 2, jam 6 × 3, jam 7–9 × 4 |
+
+Upah sejam tetap 1/173 upah sebulan. Jam istirahat yang diatur admin tidak dihitung, menit lembur
+dibulatkan ke bawah (bawaan per 30 menit), lembur lewat tengah malam ikut tanggal tap in.
+Semua diatur di **Panel admin → Tap mandiri & wajah → Aturan hitung** (pola 5/6 hari, jam pulang,
+istirahat, pembulatan). Aturan yang dipakai disimpan bersama setiap lembur.
+
+**Pendaftaran wajah (UU PDP No. 27/2022, data pribadi spesifik):** karyawan mencentang persetujuan,
+merekam wajah, lalu **admin menyetujui** setelah mencocokkan foto kecilnya dengan ID card. Karyawan bisa
+mencabut persetujuan (data wajah dihapus) kapan saja; admin menghapus data wajah karyawan yang keluar.
+
+**Yang tidak berubah:** scan ID card oleh petugas dan tap manual admin tetap 1 tap = 5,5 / 14 jam hitung.
+**Input lembur massal** sekarang memakai **jam mulai & jam selesai** (per baris SPL) dan dihitung jam aktual.
+
+Catatan keamanan: verifikasi wajah berjalan di HP karyawan, jadi aplikasi yang dimodifikasi secara teori bisa
+mengirim data palsu; QR dinamis + area petugas + persetujuan admin + rekap tetap diperiksa HRD.
+
 ### Pembaca SPL tulisan tangan (Groq) — gratis, tanpa kartu
 
 Urutan pembaca: **Groq → Gemini → Azure → pembaca lokal di HP** (yang pertama diatur yang dipakai;
@@ -473,6 +508,10 @@ Semua endpoint selain `/health` dan `/api/auth/login` butuh header
 | POST/DELETE | `/api/portal/push/langganan` | karyawan | Daftar/hapus perangkat notifikasi |
 | GET | `/api/dashboard` | admin | Ringkasan dashboard |
 | GET/POST/PATCH | `/api/pengguna`, `/api/pengguna/:id` | admin | Kelola akun |
+| GET | `/api/scan/qr-mandiri`, `/api/scan/qr-mandiri/pemakai` | admin, petugas | QR dinamis (berganti 10 detik) & daftar tap lewat QR itu hari ini |
+| GET/POST/DELETE | `/api/portal/tap` | karyawan | Status, tap in / tap out (wajah + QR), batal tap in |
+| GET/POST/DELETE | `/api/portal/wajah` | karyawan | Daftar / cabut data wajah |
+| GET/POST/DELETE | `/api/mandiri/wajah…`, `/api/mandiri/sesi…`, GET/PUT `/api/mandiri/aturan` | admin | Persetujuan wajah, tap in berjalan, aturan hitung |
 | GET | `/api/lembur-massal/batas` | admin, petugas | Batas tanggal, daftar karyawan, pembaca (Azure/lokal) |
 | POST | `/api/lembur-massal/baca-spl` | admin, petugas | Baca potongan SPL lewat Groq/Gemini/Azure (kunci di server) |
 | POST | `/api/lembur-massal` | admin, petugas | Simpan lembur massal (+ jam/alasan per karyawan, foto SPL) |

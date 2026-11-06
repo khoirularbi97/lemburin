@@ -139,7 +139,7 @@ export function kabariTapTercatat(karyawan, tap, { manual = false, dariPengajuan
   const judul = dariPengajuan ? 'Pengajuan lembur disetujui' : manual ? 'Lembur ditambahkan admin' : 'Lembur tercatat';
   diam(kirimKeKaryawan(karyawan.id, {
     judul,
-    isi: `${tgl(tanggal)} · ${jamWIB(tap.waktuTap)} WIB · ${jamFmt(tap.jamHitung)} jam hitung · ${rp(tap.nominal)}`,
+    isi: `${tgl(tanggal)} · ${tap.mulai ? `${jamWIB(tap.mulai)}–${jamWIB(tap.selesai)}` : jamWIB(tap.waktuTap)} WIB · ${jamFmt(tap.jamHitung)} jam hitung · ${rp(tap.nominal)}`,
     url: `/portal/riwayat?bulan=${periodeDari(tanggal)}`,
     tag: `tap-${tap.id}`,
   }));

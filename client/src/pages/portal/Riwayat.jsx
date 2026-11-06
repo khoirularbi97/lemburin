@@ -4,7 +4,7 @@ import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import Icon from '../../components/Icon.jsx';
 import { Memuat, useToast } from '../../components/ui.jsx';
-import { jamFmt, labelRentang, namaBulan, rp, tanggalPendek } from '../../format.js';
+import { jamFmt, labelRentang, namaBulan, rp, tanggalPendek, jamTap } from '../../format.js';
 import Lonceng from './Lonceng.jsx';
 import { tanganiError, unduhSlip } from './bersama.js';
 
@@ -51,7 +51,7 @@ export default function Riwayat() {
                     <span className={`badge ${t.jenisHari === 'KERJA' ? 'b-ok' : 'b-warn'}`} style={{ marginLeft: 8, padding: '2px 8px' }}>{t.jenisHari === 'KERJA' ? 'Kerja' : 'Libur'}</span>
                     {t.manual && <span className="badge b-ink" style={{ marginLeft: 6, padding: '2px 8px' }}>Manual</span>}
                   </b>
-                  <span className="num">{t.jam} WIB · {jamFmt(t.jamHitung)} jam × {rp(t.upahSejam)}</span>
+                  <span className="num">{jamTap(t)} WIB · {jamFmt(t.jamHitung)} jam{t.rincian ? ` (${t.rincian.map((r) => `${jamFmt(r.jam)}×${jamFmt(r.kali)}`).join(' + ')})` : ''} × {rp(t.upahSejam)}</span>
                 </div>
                 <span className="v num">{rp(t.nominal)}</span>
               </div>

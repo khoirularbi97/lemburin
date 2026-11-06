@@ -4,6 +4,8 @@
 const RELASI = {
   lembur: { petugas: ['user', 'petugasId'], karyawan: ['karyawan', 'karyawanId'], spl: ['spl', 'splId'] },
   pengajuanTap: { karyawan: ['karyawan', 'karyawanId'], diprosesOleh: ['user', 'diprosesOlehId'], lembur: ['lembur', 'lemburId'] },
+  sesiLembur: { karyawan: ['karyawan', 'karyawanId'], petugas: ['user', 'petugasId'] },
+  wajahKaryawan: { karyawan: ['karyawan', 'karyawanId'] },
 };
 
 function cocokNilai(v, syarat) {
@@ -36,8 +38,8 @@ function terapkan(r, data) {
 }
 
 export function buatFakePrisma() {
-  const db = { user: [], karyawan: [], lembur: [], pengajuanTap: [], hariLibur: [], langgananPush: [], tapDitolak: [], notifikasi: [], spl: [], pemakaianOcr: [] };
-  const id = { user: 0, karyawan: 0, lembur: 0, pengajuanTap: 0, langgananPush: 0, tapDitolak: 0, notifikasi: 0, spl: 0, pemakaianOcr: 0 };
+  const db = { user: [], karyawan: [], lembur: [], pengajuanTap: [], hariLibur: [], langgananPush: [], tapDitolak: [], notifikasi: [], spl: [], pemakaianOcr: [], sesiLembur: [], wajahKaryawan: [], pengaturan: [] };
+  const id = { user: 0, karyawan: 0, lembur: 0, pengajuanTap: 0, langgananPush: 0, tapDitolak: 0, notifikasi: 0, spl: 0, pemakaianOcr: 0, sesiLembur: 0, wajahKaryawan: 0, pengaturan: 0 };
 
   function sertakan(tabel, baris, include) {
     if (!baris || !include) return baris;
@@ -82,10 +84,13 @@ export function buatFakePrisma() {
         if (tabel === 'lembur' && rows().some((r) => r.karyawanId === data.karyawanId && r.tanggal.getTime() === data.tanggal.getTime())) {
           const e = new Error('Unique constraint'); e.code = 'P2002'; throw e;
         }
+        if (tabel === 'sesiLembur' && rows().some((r) => r.karyawanId === data.karyawanId)) {
+          const e = new Error('Unique constraint'); e.code = 'P2002'; throw e;
+        }
         if (tabel === 'langgananPush' && rows().some((r) => r.endpoint === data.endpoint)) {
           const e = new Error('Unique constraint'); e.code = 'P2002'; throw e;
         }
-        const baris = { id: ++id[tabel], createdAt: now(), ...(tabel === 'lembur' ? { manual: false } : {}), ...(tabel === 'pengajuanTap' ? { status: 'MENUNGGU' } : {}), ...(tabel === 'notifikasi' ? { dibaca: false } : {}), ...data };
+        const baris = { id: ++id[tabel], createdAt: now(), updatedAt: now(), ...(tabel === 'lembur' ? { manual: false, metode: 'TETAP' } : {}), ...(tabel === 'pengajuanTap' ? { status: 'MENUNGGU' } : {}), ...(tabel === 'notifikasi' ? { dibaca: false } : {}), ...data };
         rows().push(baris);
         return { ...baris };
       },
@@ -93,6 +98,7 @@ export function buatFakePrisma() {
         const r = rows().find((x) => cocok(x, where));
         if (!r) { const e = new Error('not found'); e.code = 'P2025'; throw e; }
         terapkan(r, data);
+        r.updatedAt = now();
         return { ...r };
       },
       async updateMany({ where, data }) {
@@ -129,6 +135,9 @@ export function buatFakePrisma() {
     notifikasi: model('notifikasi'),
     spl: model('spl'),
     pemakaianOcr: model('pemakaianOcr'),
+    sesiLembur: model('sesiLembur'),
+    wajahKaryawan: model('wajahKaryawan'),
+    pengaturan: model('pengaturan'),
     tapDitolak: model('tapDitolak'),
     async $queryRaw(strings, ...nilai) {
       const sql = strings.join('?');

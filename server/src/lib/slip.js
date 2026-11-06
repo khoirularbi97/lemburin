@@ -78,8 +78,8 @@ export function buatSlip({ karyawan, bulan, taps, perusahaan, dicetak }) {
 
   // Tabel rincian
   const kol = [
-    { j: 'No', w: 26, a: 'left' }, { j: 'Tanggal', w: 82, a: 'left' }, { j: 'Jam tap', w: 50, a: 'left' },
-    { j: 'Jenis hari', w: 76, a: 'left' }, { j: 'Jam hitung', w: 62, a: 'right' }, { j: 'Upah sejam', w: 82, a: 'right' },
+    { j: 'No', w: 26, a: 'left' }, { j: 'Tanggal', w: 74, a: 'left' }, { j: 'Jam', w: 70, a: 'left' },
+    { j: 'Jenis hari', w: 64, a: 'left' }, { j: 'Jam hitung', w: 62, a: 'right' }, { j: 'Upah sejam', w: 82, a: 'right' },
     { j: 'Nominal', w: L - 26 - 82 - 50 - 76 - 62 - 82, a: 'right' },
   ];
   const baris = (isi, yy, opsi = {}) => {
@@ -104,7 +104,7 @@ export function buatSlip({ karyawan, bulan, taps, perusahaan, dicetak }) {
   taps.forEach((t, i) => {
     if (y > doc.page.height - 120) { doc.addPage(); y = 48; kepalaTabel(); }
     const jenis = t.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur';
-    baris([i + 1, tglPanjang(t.tanggal), t.jam, jenis + (t.manual ? ' *' : ''), jamFmt(t.jamHitung), rp(t.upahSejam), rp(t.nominal)], y);
+    baris([i + 1, tglPanjang(t.tanggal), t.jamMulai ? `${t.jamMulai}–${t.jamSelesai}` : t.jam, jenis + (t.manual ? ' *' : ''), jamFmt(t.jamHitung), rp(t.upahSejam), rp(t.nominal)], y);
     y += 18;
     doc.moveTo(x0, y - 4).lineTo(x0 + L, y - 4).lineWidth(0.5).strokeColor(GARIS).stroke();
   });

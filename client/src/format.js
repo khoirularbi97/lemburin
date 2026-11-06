@@ -52,3 +52,6 @@ export function batasManual() {
   const lalu = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
   return { min: batasPeriode(lalu).mulai, max };
 }
+
+/** Jam tap untuk ditampilkan: "16:05–19:10" (jam aktual) atau "17:05" (1 tap). */
+export const jamTap = (t) => (t?.jamMulai ? `${t.jamMulai}–${t.jamSelesai}` : t?.jam || '');

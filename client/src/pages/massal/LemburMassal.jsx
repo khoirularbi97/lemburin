@@ -4,6 +4,7 @@ import { useAuth } from '../../auth.jsx';
 import Icon from '../../components/Icon.jsx';
 import { Avatar, Memuat, Modal, useToast } from '../../components/ui.jsx';
 import { hariIniWIB, jamFmt, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
+import { hitungLemburAktual } from '../../lib/hitungAktual.js';
 import { bacaSpl } from '../../lib/bacaSpl.js';
 import { petakanSpl } from '../../lib/petaSpl.js';
 
@@ -141,7 +142,7 @@ export default function LemburMassal({ kecil = false }) {
   const admin = user.role === 'ADMIN';
   const [mode, setMode] = useState('centang');
   const [batas, setBatas] = useState(null);
-  const [f, setF] = useState({ tanggal: '', jam: '17:00', nomorSpl: '', alasan: '' });
+  const [f, setF] = useState({ tanggal: '', mulai: '', jam: '19:00', nomorSpl: '', alasan: '' });
   const [data, setData] = useState(null);
   const [pilih, setPilih] = useState(() => new Set());
   const [cari, setCari] = useState('');
@@ -192,7 +193,26 @@ export default function LemburMassal({ kecil = false }) {
   const bisaDipilih = daftar.filter((k) => !k.sudahTap);
   const semuaTerpilih = bisaDipilih.length > 0 && bisaDipilih.every((k) => pilih.has(k.id));
   const dipilih = (data?.karyawan || []).filter((k) => pilih.has(k.id));
-  const total = dipilih.reduce((s, k) => s + (k.nominal || 0), 0);
+  const POLA_JAM = /^([01]\d|2[0-3]):[0-5]\d$/;
+  /** Pratinjau PP 35/2021 untuk jam mulai–selesai di tanggal terpilih (hasil akhir dihitung server). */
+  const hitung = useCallback((mulai, selesai) => {
+    if (!data || !POLA_JAM.test(mulai || '') || !POLA_JAM.test(selesai || '')) return null;
+    try {
+      return hitungLemburAktual({
+        upahBulanan: 173, tanggal: data.tanggal, mulai, selesai, aturan: data.aturan,
+        libur: data.libur != null ? new Map([[data.tanggal, data.libur]]) : new Map(),
+      });
+    } catch { return null; }
+  }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Jam mulai/selesai per karyawan: dari baris SPL kalau ada, selain itu jam umum
+  const jamUntuk = (id) => {
+    const b = (barisSpl || []).find((x) => x.ikut && x.karyawanId === id);
+    return { mulai: b?.mulai || f.mulai, selesai: b?.jam || f.jam };
+  };
+  const perOrang = dipilih.map((k) => { const j = jamUntuk(k.id); const h = hitung(j.mulai, j.selesai); return { k, ...j, h }; });
+  const totalJamHitung = perOrang.reduce((s2, x) => s2 + (x.h?.jamHitung || 0), 0);
+  const total = perOrang.reduce((s2, x) => s2 + Math.round((x.h?.jamHitung || 0) * (x.k.upahSejam || 0)), 0);
+  const hUmum = hitung(f.mulai, f.jam);
 
   const ubah = (k) => (e) => { setF({ ...f, [k]: e.target.value }); setErr(''); };
   const togel = (id) => setPilih((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -204,11 +224,18 @@ export default function LemburMassal({ kecil = false }) {
     if (b.tanggal && batas && b.tanggal >= batas.min && b.tanggal <= batas.max) isi.tanggal = b.tanggal;
     else if (b.tanggal) toast(`Tanggal di SPL (${tanggalPendek(b.tanggal)}) di luar batas input. Pilih tanggal yang benar.`, true);
     if (b.jam) isi.jam = b.jam;
+    // Jam mulai terbanyak di SPL jadi jam mulai umum
+    if (r.baris?.length) {
+      const hit = {};
+      r.baris.forEach((x) => { if (x.mulai) hit[x.mulai] = (hit[x.mulai] || 0) + 1; });
+      const umum = Object.entries(hit).sort((a, c) => c[1] - a[1])[0]?.[0];
+      if (umum) isi.mulai = umum;
+    }
     if (b.nomor) isi.nomorSpl = b.nomor;
     if (b.keterangan) isi.alasan = b.keterangan;
     setF(isi);
     if (r.baris) {
-      const rows = r.baris.map((x) => ({ ...x, karyawanId: x.pilihan, ikut: Boolean(x.pilihan), jam: x.selesai || isi.jam }));
+      const rows = r.baris.map((x) => ({ ...x, karyawanId: x.pilihan, ikut: Boolean(x.pilihan), jam: x.selesai || isi.jam, mulai: x.mulai || isi.mulai || '' }));
       setBarisSpl(rows);
       setPilih(new Set(rows.filter((x) => x.ikut && x.karyawanId).map((x) => x.karyawanId)));
       const yakin = rows.filter((x) => x.ikut).length;
@@ -245,14 +272,17 @@ export default function LemburMassal({ kecil = false }) {
 
   function cekSebelumSimpan() {
     if (!f.tanggal || (batas && (f.tanggal < batas.min || f.tanggal > batas.max))) return setErr(`Tanggal harus antara ${tanggalPendek(batas.min)} dan hari ini.`);
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(f.jam)) return setErr('Isi jam selesai lembur.');
+    if (!POLA_JAM.test(f.mulai)) return setErr('Isi jam mulai lembur.');
+    if (!POLA_JAM.test(f.jam)) return setErr('Isi jam selesai lembur.');
     if (f.alasan.trim().length < 3) return setErr('Isi keterangan pekerjaan.');
     if (!dipilih.length) return setErr('Centang minimal satu karyawan.');
     if (mode === 'foto' && !foto) return setErr('Foto SPL belum dibaca.');
     const dobel = [...dipakaiBaris.values()].find((v) => v.length > 1);
     if (dobel) return setErr(`Baris ${dobel.map((i) => barisSpl[i].no).join(' & ')} memilih karyawan yang sama. Perbaiki salah satunya.`);
-    const jamSalah = (barisSpl || []).find((x) => x.ikut && x.jam && !/^([01]\d|2[0-3]):[0-5]\d$/.test(x.jam));
-    if (jamSalah) return setErr(`Jam selesai baris ${jamSalah.no} belum benar.`);
+    const jamSalah = (barisSpl || []).find((x) => x.ikut && ((x.jam && !POLA_JAM.test(x.jam)) || (x.mulai && !POLA_JAM.test(x.mulai))));
+    if (jamSalah) return setErr(`Jam mulai/selesai baris ${jamSalah.no} belum benar.`);
+    const nol = perOrang.find((x) => !x.h || x.h.menitLembur <= 0);
+    if (nol) return setErr(`${nol.k.nama}: tidak ada jam lembur dari ${nol.mulai || '?'} sampai ${nol.selesai || '?'}${nol.h?.jenisHari === 'KERJA' ? ` (hari kerja dihitung mulai ${nol.h.mulaiDihitung})` : ''}.`);
     setErr('');
     setKonfirmasi(true);
   }
@@ -261,13 +291,14 @@ export default function LemburMassal({ kecil = false }) {
     setProses(true);
     try {
       const body = {
-        tanggal: f.tanggal, jam: f.jam, nomorSpl: f.nomorSpl.trim() || null, alasan: f.alasan.trim(),
+        tanggal: f.tanggal, mulai: f.mulai, jam: f.jam, nomorSpl: f.nomorSpl.trim() || null, alasan: f.alasan.trim(),
         karyawanIds: dipilih.map((k) => k.id), sumber: mode === 'foto' ? 'FOTO' : 'CENTANG',
         ...(mode === 'foto' && foto ? { foto: foto.fotoDataUrl, teksOcr: foto.teks.slice(0, 20000) } : {}),
         ...(barisSpl ? {
           rincian: barisSpl.filter((x) => x.ikut && x.karyawanId && pilih.has(x.karyawanId)).map((x) => ({
             karyawanId: x.karyawanId,
             jam: x.jam && x.jam !== f.jam ? x.jam : null,
+            mulai: x.mulai && x.mulai !== f.mulai ? x.mulai : null,
             alasan: x.alasan && x.alasan !== f.alasan ? x.alasan.slice(0, 200) : null,
           })),
         } : {}),
@@ -289,7 +320,7 @@ export default function LemburMassal({ kecil = false }) {
 
   const Kepala = kecil
     ? <div className="p-head"><div><h1>Input lembur</h1><p>{data ? `Area ${data.lingkup}` : 'Banyak karyawan sekaligus'}</p></div></div>
-    : <div className="ph"><div><h1>Input lembur massal</h1><p>Catat lembur banyak karyawan sekaligus dari Surat Perintah Lembur. Dihitung otomatis 5,5 / 14 jam seperti tap biasa.</p></div></div>;
+    : <div className="ph"><div><h1>Input lembur massal</h1><p>Catat lembur banyak karyawan sekaligus dari Surat Perintah Lembur. Jam mulai–selesai dihitung otomatis sesuai PP 35/2021 (hari kerja / libur).</p></div></div>;
 
   const isi = (
     <>
@@ -361,7 +392,11 @@ export default function LemburMassal({ kecil = false }) {
                         : x.karyawanId && x.karyawanId === x.pilihan ? <span className="badge b-ok">Cocok</span>
                           : x.karyawanId ? <span className="badge b-ink">Dipilih manual</span>
                             : <span className="badge b-warn">Perlu dipilih</span>}
-                    <input className="input jam" type="time" value={x.jam || ''} aria-label={`Jam selesai baris ${x.no}`} onChange={(e) => ubahBaris(i, { jam: e.target.value })} />
+                    <span className="ms-jam2">
+                      <input className="input jam" type="time" value={x.mulai || ''} aria-label={`Jam mulai baris ${x.no}`} title="Jam mulai" onChange={(e) => ubahBaris(i, { mulai: e.target.value })} />
+                      <input className="input jam" type="time" value={x.jam || ''} aria-label={`Jam selesai baris ${x.no}`} title="Jam selesai" onChange={(e) => ubahBaris(i, { jam: e.target.value })} />
+                    </span>
+                    {(() => { const h = hitung(x.mulai, x.jam); return h ? <span className={`ms-pratinjau${h.menitLembur ? '' : ' err'}`}>{jamFmt(h.jamLembur)} jam → {jamFmt(h.jamHitung)} jam hitung</span> : null; })()}
                     {x.alasan && <span className="muted alasan" title={x.alasan}>{x.alasan}</span>}
                   </span>
                 </span>
@@ -379,6 +414,10 @@ export default function LemburMassal({ kecil = false }) {
               <input className="input" type="date" id="ms-t" min={batas?.min} max={batas?.max} value={f.tanggal} onChange={ubah('tanggal')} />
             </div>
             <div className="fld">
+              <label htmlFor="ms-m">Jam mulai (WIB)</label>
+              <input className="input" type="time" id="ms-m" value={f.mulai} onChange={ubah('mulai')} />
+            </div>
+            <div className="fld">
               <label htmlFor="ms-j">Jam selesai (WIB)</label>
               <input className="input" type="time" id="ms-j" value={f.jam} onChange={ubah('jam')} />
             </div>
@@ -392,7 +431,10 @@ export default function LemburMassal({ kecil = false }) {
             </div>
             {data && f.tanggal && (
               <p className="full hint" style={{ margin: 0 }}>
-                {tanggalPanjang(f.tanggal)} · <span className={`badge ${data.hari.jenis === 'KERJA' ? 'b-ok' : 'b-warn'}`}>{data.hari.label}{data.hari.keterangan ? ` · ${data.hari.keterangan}` : ''}</span> · {jamFmt(data.hari.jam)} jam hitung per orang
+                {tanggalPanjang(f.tanggal)} · <span className={`badge ${data.hari.jenis === 'KERJA' ? 'b-ok' : 'b-warn'}`}>{data.hari.label}{data.hari.keterangan ? ` · ${data.hari.keterangan}` : ''}</span>
+                {hUmum ? <> · {f.mulai}–{f.jam}: {hUmum.mulaiDihitung !== f.mulai ? `dihitung mulai ${hUmum.mulaiDihitung} (jam pulang), ` : ''}{hUmum.menitIstirahat ? `istirahat ${hUmum.menitIstirahat} menit dipotong, ` : ''}<b>{jamFmt(hUmum.jamLembur)} jam lembur = {jamFmt(hUmum.jamHitung)} jam hitung</b> ({hUmum.rincian.map((q) => `${jamFmt(q.jam)}×${jamFmt(q.kali)}`).join(' + ') || '0'}) per orang</>
+                  : ' · isi jam mulai & selesai untuk melihat hitungan PP 35/2021'}
+                {hUmum?.peringatan?.filter((q) => !/jam pulang/.test(q)).map((q) => <span key={q} className="err" style={{ display: 'block' }}>⚠ {q}</span>)}
               </p>
             )}
           </div>
@@ -432,7 +474,7 @@ export default function LemburMassal({ kecil = false }) {
                       <span className="v">
                         {k.sudahTap
                           ? <span className="badge b-mute">Sudah tap {k.sudahTap.jam}</span>
-                          : admin && k.nominal != null ? <span className="num">{rp(k.nominal)}</span> : null}
+                          : admin && k.upahSejam != null && hUmum ? <span className="num">{rp(Math.round(hUmum.jamHitung * k.upahSejam))}</span> : null}
                       </span>
                     </label>
                   );
@@ -445,7 +487,7 @@ export default function LemburMassal({ kecil = false }) {
             <div style={{ minWidth: 0 }}>
               <b>{dipilih.length} karyawan dipilih</b>
               <div className="muted" style={{ fontSize: 13 }}>
-                {data ? `${jamFmt(dipilih.length * data.hari.jam)} jam hitung` : ''}{admin && dipilih.length ? ` · ${rp(total)}` : ''}
+                {data ? `${jamFmt(totalJamHitung)} jam hitung` : ''}{admin && dipilih.length ? ` · ${rp(total)}` : ''}
               </div>
             </div>
             {err && <p className="err" role="alert" style={{ flexBasis: '100%', order: 3 }}>{err}</p>}
@@ -464,10 +506,10 @@ export default function LemburMassal({ kecil = false }) {
       {konfirmasi && (
         <Modal judul={`Simpan ${dipilih.length} lembur?`} onClose={() => !proses && setKonfirmasi(false)}>
           <div className="glass kv">
-            <div><span>Tanggal</span><b>{tanggalPendek(f.tanggal)} · s/d {f.jam}</b></div>
+            <div><span>Tanggal</span><b>{tanggalPendek(f.tanggal)} · {f.mulai}–{f.jam}{barisSpl ? ' (atau per baris SPL)' : ''}</b></div>
             {f.nomorSpl && <div><span>No. SPL</span><b>{f.nomorSpl}</b></div>}
             <div><span>Pekerjaan</span><b style={{ textAlign: 'right' }}>{f.alasan}</b></div>
-            <div><span>Karyawan</span><b>{dipilih.length} orang · {jamFmt(dipilih.length * (data?.hari.jam || 0))} jam hitung</b></div>
+            <div><span>Karyawan</span><b>{dipilih.length} orang · {jamFmt(totalJamHitung)} jam hitung (PP 35/2021)</b></div>
             {admin && <div><span>Total upah lembur</span><b className="num">{rp(total)}</b></div>}
             {mode === 'foto' && foto && <div><span>Bukti</span><b>Foto SPL · {Math.round((foto.fotoDataUrl.length * 3) / 4 / 1024)} KB{batas?.masaSimpanFotoBulan ? ` · disimpan ${batas.masaSimpanFotoBulan} bulan` : ''}</b></div>}
           </div>

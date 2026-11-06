@@ -4,7 +4,7 @@ import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import Icon from '../../components/Icon.jsx';
 import { Memuat, Tile, useToast } from '../../components/ui.jsx';
-import { jamFmt, labelRentang, namaBulan, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
+import { jamFmt, jamTap, labelRentang, namaBulan, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
 import { aktifkanNotifikasi, jenisDukungan, statusLangganan } from '../../push.js';
 import Lonceng from './Lonceng.jsx';
 import KartuCadangan from './KartuCadangan.jsx';
@@ -87,8 +87,8 @@ export default function Beranda() {
               <b>{d.hariIni.tap ? 'Lembur hari ini tercatat' : 'Belum ada tap hari ini'}</b>
               <span>
                 {d.hariIni.tap
-                  ? `${d.hariIni.tap.jam} WIB · ${jamFmt(d.hariIni.tap.jamHitung)} jam · ${rp(d.hariIni.tap.nominal)}`
-                  : `${d.hariIni.label}${d.hariIni.keterangan ? ` · ${d.hariIni.keterangan}` : ''} · ${jamFmt(d.hariIni.jam)} jam per tap`}
+                  ? `${jamTap(d.hariIni.tap)} WIB · ${jamFmt(d.hariIni.tap.jamHitung)} jam · ${rp(d.hariIni.tap.nominal)}`
+                  : `${d.hariIni.label}${d.hariIni.keterangan ? ` · ${d.hariIni.keterangan}` : ''} · tap mandiri di menu Tap`}
               </span>
             </div>
           </div>
@@ -124,7 +124,7 @@ export default function Beranda() {
               <div className="li" key={t.id}>
                 <div className="t">
                   <b>{tanggalPendek(t.tanggal)}{t.manual && <span className="badge b-ink" style={{ marginLeft: 8, padding: '2px 8px' }}>Manual</span>}</b>
-                  <span>{t.jam} WIB · {t.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur'} · {jamFmt(t.jamHitung)} jam</span>
+                  <span>{jamTap(t)} WIB · {t.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur'} · {jamFmt(t.jamHitung)} jam</span>
                 </div>
                 <span className="v num">{rp(t.nominal)}</span>
               </div>

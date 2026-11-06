@@ -24,3 +24,15 @@ for (const [dari, ke] of salin) {
   if (!fs.existsSync(t) || fs.statSync(t).size !== fs.statSync(dari).size) fs.copyFileSync(dari, t);
 }
 console.log('File OCR siap di public/ocr');
+
+// Model pengenal wajah (face-api) untuk tap mandiri: detektor kecil, 68 titik wajah, pengenal wajah
+const tujuanWajah = path.join(akar, 'public', 'wajah');
+fs.mkdirSync(tujuanWajah, { recursive: true });
+for (const nama of ['tiny_face_detector_model', 'face_landmark_68_model', 'face_recognition_model']) {
+  for (const ext of ['-weights_manifest.json', '.bin']) {
+    const dari = nm('@vladmandic', 'face-api', 'model', nama + ext);
+    const t = path.join(tujuanWajah, nama + ext);
+    if (!fs.existsSync(t) || fs.statSync(t).size !== fs.statSync(dari).size) fs.copyFileSync(dari, t);
+  }
+}
+console.log('Model wajah siap di public/wajah');

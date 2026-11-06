@@ -36,7 +36,9 @@ async function hitungRekap(bulan, departemen) {
     r.taps.push({
       id: t.id, tanggal: dariTanggalDb(t.tanggal), jam: jamWIB(t.waktuTap), jenisHari: t.jenisHari,
       jamHitung: t.jamHitung, upahSejam: t.upahSejam, nominal: t.nominal, petugas: t.petugas.username,
-      manual: t.manual, alasan: t.alasan,
+      manual: t.manual, alasan: t.alasan, metode: t.metode || 'TETAP', sumber: t.sumber || null,
+      jamMulai: t.mulai ? jamWIB(t.mulai) : null, jamSelesai: t.selesai ? jamWIB(t.selesai) : null,
+      menitLembur: t.menitLembur ?? null, rincian: t.rincianHitung?.rincian || null,
       spl: t.spl ? { id: t.spl.id, nomor: t.spl.nomor, sumber: t.spl.sumber, adaFoto: Boolean(t.spl.fotoMime) && !t.spl.fotoDihapus, fotoDihapus: Boolean(t.spl.fotoDihapus) } : null,
     });
   }
@@ -92,14 +94,16 @@ router.get('/export', ah(async (req, res) => {
   [4, 5, 9].forEach((i) => { ws.getColumn(i).numFmt = rp; });
 
   const wd = wb.addWorksheet('Detail tap');
-  wd.addRow(['Tanggal', 'Jam tap', 'Karyawan', 'NIK', 'Departemen', 'Jenis hari', 'Jam hitung', 'Upah sejam', 'Nominal', 'Sumber', 'Dicatat oleh', 'Alasan manual']).font = { bold: true };
+  wd.addRow(['Tanggal', 'Jam tap', 'Mulai', 'Selesai', 'Menit lembur', 'Rincian tarif', 'Karyawan', 'NIK', 'Departemen', 'Jenis hari', 'Jam hitung', 'Upah sejam', 'Nominal', 'Sumber', 'Dicatat oleh', 'Alasan manual']).font = { bold: true };
   for (const r of rows) {
     for (const t of r.taps) {
-      wd.addRow([t.tanggal, t.jam, r.karyawan.nama, r.karyawan.nik, r.karyawan.departemen, t.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur', t.jamHitung, t.upahSejam, t.nominal, t.spl ? (t.spl.sumber === 'FOTO' ? 'Foto SPL' : 'Input massal') : t.manual ? 'Manual' : 'Scan QR', t.petugas, t.alasan || '']);
+      const sumber = t.sumber === 'MANDIRI' ? 'Tap mandiri (wajah + QR)' : t.spl ? (t.spl.sumber === 'FOTO' ? 'Foto SPL' : 'Input massal') : t.manual ? 'Manual' : 'Scan QR';
+      const rinci = t.rincian ? t.rincian.map((x) => `${x.jam}j×${x.kali}`).join(' + ') : 'Tetap (5,5 / 14)';
+      wd.addRow([t.tanggal, t.jam, t.jamMulai || '', t.jamSelesai || '', t.menitLembur ?? '', rinci, r.karyawan.nama, r.karyawan.nik, r.karyawan.departemen, t.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur', t.jamHitung, t.upahSejam, t.nominal, sumber, t.petugas, t.alasan || '']);
     }
   }
-  wd.columns.forEach((c, i) => { c.width = [12, 9, 24, 12, 18, 12, 11, 12, 12, 10, 16, 36][i]; });
-  [8, 9].forEach((i) => { wd.getColumn(i).numFmt = rp; });
+  wd.columns.forEach((c, i) => { c.width = [12, 9, 8, 8, 11, 22, 24, 12, 18, 12, 11, 12, 12, 20, 16, 36][i]; });
+  [12, 13].forEach((i) => { wd.getColumn(i).numFmt = rp; });
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="rekap-lembur-${bulan}.xlsx"`);

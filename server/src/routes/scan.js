@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { kabariTapTercatat } from '../lib/notifikasi.js';
+import { buatQrMandiri } from '../lib/qrMandiri.js';
+import { ambilAturan } from '../lib/aturanLembur.js';
 import { ah, ringkasKaryawan } from '../lib/util.js';
 import {
   dariTanggalDb, hitungLembur, jamWIB, jenisHari, keTanggalDb, waktuJakarta,
@@ -52,10 +54,36 @@ function formatTap(t) {
   };
 }
 
+// QR dinamis untuk tap mandiri karyawan (ditampilkan di HP petugas/admin, berganti tiap 10 detik)
+router.get('/qr-mandiri', ah(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ...buatQrMandiri(req.user.id), area: req.user.area, petugas: req.user.nama });
+}));
+
+// Siapa saja yang tap in / tap out lewat QR petugas ini hari ini (ditampilkan di bawah QR).
+// Leader bisa langsung melihat kalau ada nama yang orangnya tidak ada di depannya.
+router.get('/qr-mandiri/pemakai', ah(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const { tanggal } = waktuScan(req.query.simulasi);
+  const tgl = keTanggalDb(tanggal);
+  const [sesi, lembur] = await Promise.all([
+    prisma.sesiLembur.findMany({ where: { petugasId: req.user.id }, include: { karyawan: true } }),
+    prisma.lembur.findMany({ where: { tanggal: tgl, sumber: 'MANDIRI' }, include: { karyawan: true } }),
+  ]);
+  const kejadian = [];
+  for (const s of sesi) kejadian.push({ jenis: 'TAP_IN', waktu: s.mulai, karyawan: ringkasKaryawan(s.karyawan) });
+  for (const t of lembur) {
+    if (t.rincianHitung?.petugasTapIn === req.user.id) kejadian.push({ jenis: 'TAP_IN', waktu: t.mulai, karyawan: ringkasKaryawan(t.karyawan) });
+    if (t.petugasId === req.user.id) kejadian.push({ jenis: 'TAP_OUT', waktu: t.selesai, karyawan: ringkasKaryawan(t.karyawan), jamHitung: t.jamHitung });
+  }
+  kejadian.sort((a, b) => b.waktu - a.waktu);
+  res.json({ tanggal, kejadian: kejadian.slice(0, 100).map((k) => ({ ...k, jam: jamWIB(k.waktu) })) });
+}));
+
 // Info hari ini untuk ditampilkan di layar scanner
 router.get('/hari-ini', ah(async (req, res) => {
   const { tanggal, jam } = waktuScan(req.query.simulasi);
-  const hari = jenisHari(tanggal, await liburPada(tanggal));
+  const hari = jenisHari(tanggal, await liburPada(tanggal), await ambilAturan());
   res.json({ tanggal, jam, ...hari });
 }));
 
@@ -98,7 +126,7 @@ router.post('/', ah(async (req, res) => {
   }
 
   const libur = await liburPada(tanggal);
-  const hasil = hitungLembur({ upahBulanan: karyawan.upahBulanan, tanggal, libur });
+  const hasil = hitungLembur({ upahBulanan: karyawan.upahBulanan, tanggal, libur, aturan: await ambilAturan() });
 
   try {
     const tap = await prisma.lembur.create({
@@ -111,6 +139,7 @@ router.post('/', ah(async (req, res) => {
         upahSejam: hasil.upahSejam,
         nominal: hasil.nominal,
         petugasId,
+        sumber: 'KARTU',
       },
     });
     kabariTapTercatat(karyawan, tap); // notifikasi ke HP karyawan, tidak ditunggu

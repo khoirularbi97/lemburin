@@ -20,8 +20,9 @@ export default function PortalLayout() {
   return (
     <div className="p-shell">
       <Outlet />
-      <nav className="tabs t4 glass" aria-label="Navigasi portal karyawan">
+      <nav className="tabs t5 glass" aria-label="Navigasi portal karyawan">
         <NavLink to="/portal" end><Icon name="grid" /><span>Beranda</span></NavLink>
+        <NavLink to="/portal/tap"><Icon name="scan" /><span>Tap</span></NavLink>
         <NavLink to="/portal/riwayat"><Icon name="clock" /><span>Riwayat</span></NavLink>
         <NavLink to="/portal/pengajuan"><Icon name="plus" /><span>Pengajuan</span></NavLink>
         <NavLink to="/portal/akun"><Icon name="user" /><span>Akun</span></NavLink>

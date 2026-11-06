@@ -161,7 +161,7 @@ export default function Rekap() {
   return (
     <>
       <div className="ph">
-        <div><h1>Rekap lembur</h1><p>Periode tanggal 21 s/d 20 bulan berikutnya · hari kerja 5,5 jam, Sabtu/Minggu/tanggal merah 14 jam hitung per tap</p></div>
+        <div><h1>Rekap lembur</h1><p>Periode tanggal 21 s/d 20 bulan berikutnya · scan kartu 5,5 / 14 jam hitung per tap · tap mandiri &amp; input dengan jam mulai–selesai dihitung jam aktual (PP 35/2021)</p></div>
         <div className="acts">
           <div className="fld">
             <label htmlFor="bulan">Periode (21–20)</label>
@@ -233,11 +233,12 @@ export default function Rekap() {
                                       {r.taps.map((x) => (
                                         <tr key={x.id}>
                                           <td>{tanggalPendek(x.tanggal)}</td>
-                                          <td className="num">{x.jam}</td>
+                                          <td className="num">{x.jamMulai ? `${x.jamMulai}–${x.jamSelesai}` : x.jam}{x.rincian && <div className="muted" style={{ fontSize: 11.5 }}>{x.rincian.map((q) => `${jamFmt(q.jam)}×${jamFmt(q.kali)}`).join(' + ')}</div>}</td>
                                           <td>
                                             <span style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
                                               <span className={`badge ${x.jenisHari === 'KERJA' ? 'b-ok' : 'b-warn'}`}>{x.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur'}</span>
                                               {x.manual && <span className="badge b-ink" title={x.alasan || ''}>{x.spl ? (x.spl.sumber === 'FOTO' ? 'Foto SPL' : 'Massal') : 'Manual'}</span>}
+                                              {x.sumber === 'MANDIRI' && <span className="badge b-mute">Mandiri</span>}
                                             </span>
                                             {x.manual && x.alasan && <div className="muted" style={{ fontSize: 12, marginTop: 4, maxWidth: 260 }}>{x.alasan}</div>}
                                             {x.spl?.adaFoto && <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => setFotoSpl(x.spl)}>Lihat foto SPL</button>}

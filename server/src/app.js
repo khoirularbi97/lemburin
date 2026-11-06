@@ -14,6 +14,7 @@ import penggunaRoutes from './routes/pengguna.js';
 import portalRoutes from './routes/portal.js';
 import pengajuanRoutes from './routes/pengajuan.js';
 import massalRoutes from './routes/massal.js';
+import mandiriAdminRoutes from './routes/mandiriAdmin.js';
 
 export function buatApp() {
   const app = express();
@@ -36,6 +37,8 @@ export function buatApp() {
   app.use(helmet());
   // Input massal boleh membawa foto SPL (sudah dikompres di HP), jadi batasnya lebih besar
   app.use('/api/lembur-massal', express.json({ limit: '4mb' }));
+  // Pendaftaran wajah membawa foto kecil (±30 KB)
+  app.use('/api/portal/wajah', express.json({ limit: '250kb' }));
   app.use(express.json({ limit: '100kb' }));
 
   // Dipakai cron ping & health check Render. Sengaja tidak menyentuh database
@@ -51,6 +54,7 @@ export function buatApp() {
   app.use('/api/pengguna', wajibLogin, wajibPeran('ADMIN'), penggunaRoutes);
   app.use('/api/pengajuan', wajibLogin, wajibPeran('ADMIN'), pengajuanRoutes);
   app.use('/api/lembur-massal', wajibLogin, wajibPeran('ADMIN', 'PETUGAS'), massalRoutes);
+  app.use('/api/mandiri', wajibLogin, wajibPeran('ADMIN'), mandiriAdminRoutes);
   // Portal karyawan memakai token jenis KARYAWAN (lihat middleware/auth.js)
   app.use('/api/portal', portalRoutes);
 
