@@ -26,6 +26,7 @@ function cocokNilai(v, syarat) {
 function cocok(baris, where = {}) {
   return Object.entries(where).every(([k, s]) => {
     if (k === 'karyawanId_tanggal') return cocok(baris, s);
+    if (k === 'NOT') return !cocok(baris, s);
     return cocokNilai(baris[k], s);
   });
 }

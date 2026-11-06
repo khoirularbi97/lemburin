@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import { useAuth } from '../../auth.jsx';
 import Icon from '../../components/Icon.jsx';
-import { Memuat, Modal, Tile, useToast } from '../../components/ui.jsx';
+import { Konfirmasi, Memuat, Modal, Tile, useToast } from '../../components/ui.jsx';
 
 const KOSONG = { username: '', nama: '', role: 'PETUGAS', area: 'Semua', password: '' };
 
@@ -19,6 +19,7 @@ export default function Pengguna() {
   const [form, setForm] = useState(null);
   const [error, setError] = useState('');
   const [sandi, setSandi] = useState(null);
+  const [hapus, setHapus] = useState(null);
 
   const muat = useCallback(() => api('/api/pengguna').then(setList).catch((e) => toast(e.message, true)), [toast]);
   useEffect(() => {
@@ -30,8 +31,14 @@ export default function Pengguna() {
     e.preventDefault();
     setError('');
     try {
-      await api('/api/pengguna', { method: 'POST', body: form });
-      toast(`Pengguna ${form.username} ditambahkan`);
+      if (form.id) {
+        const { username, nama, role, area } = form;
+        await api(`/api/pengguna/${form.id}`, { method: 'PATCH', body: { username, nama, role, area: role === 'ADMIN' ? 'Semua' : area } });
+        toast(`Data ${username} disimpan`);
+      } else {
+        await api('/api/pengguna', { method: 'POST', body: form });
+        toast(`Pengguna ${form.username} ditambahkan`);
+      }
       setForm(null);
       muat();
     } catch (err) { setError(err.message); }
@@ -57,16 +64,17 @@ export default function Pengguna() {
 
       {form && (
         <form className="glass form" onSubmit={simpan}>
-          <h2>Tambah pengguna</h2>
+          <h2>{form.id ? `Edit ${form.usernameLama}` : 'Tambah pengguna'}</h2>
           <div className="fld"><label htmlFor="u-user">Username</label><input className="input" id="u-user" autoCapitalize="off" required placeholder="petugas.qc" value={form.username} onChange={set('username')} autoFocus /></div>
           <div className="fld"><label htmlFor="u-nama">Nama</label><input className="input" id="u-nama" required value={form.nama} onChange={set('nama')} /></div>
-          <div className="fld"><label htmlFor="u-role">Peran</label><select className="input" id="u-role" value={form.role} onChange={set('role')}><option value="PETUGAS">Petugas scan</option><option value="ADMIN">Admin</option></select></div>
-          <div className="fld"><label htmlFor="u-area">Area</label><select className="input" id="u-area" value={form.area} onChange={set('area')}><option>Semua</option>{departemen.map((d) => <option key={d}>{d}</option>)}</select></div>
-          <div className="fld"><label htmlFor="u-pw">Kata sandi awal</label><input className="input" id="u-pw" required minLength={6} value={form.password} onChange={set('password')} /></div>
+          <div className="fld"><label htmlFor="u-role">Peran</label><select className="input" id="u-role" value={form.role} onChange={set('role')} disabled={form.id === saya.id}><option value="PETUGAS">Petugas scan</option><option value="ADMIN">Admin</option></select></div>
+          <div className="fld"><label htmlFor="u-area">Area</label><select className="input" id="u-area" value={form.role === 'ADMIN' ? 'Semua' : form.area} onChange={set('area')} disabled={form.role === 'ADMIN'}><option>Semua</option>{departemen.map((d) => <option key={d}>{d}</option>)}</select></div>
+          {!form.id && <div className="fld"><label htmlFor="u-pw">Kata sandi awal</label><input className="input" id="u-pw" required minLength={6} value={form.password} onChange={set('password')} /></div>}
           <div className="full">
             {error && <p className="err" role="alert" style={{ flexBasis: '100%' }}>{error}</p>}
             <button type="submit" className="btn">Simpan</button>
             <button type="button" className="btn key" onClick={() => setForm(null)}>Batal</button>
+            {form.id && <span className="muted" style={{ fontSize: 13 }}>{form.id === saya.id ? 'Peran akun sendiri tidak bisa diubah. ' : ''}Perubahan peran & area langsung berlaku. Kata sandi diubah lewat Reset sandi.</span>}
           </div>
         </form>
       )}
@@ -92,10 +100,12 @@ export default function Pengguna() {
                     <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600, color: u.aktif ? undefined : 'var(--muted)' }}><span className={`dot${u.aktif ? '' : ' off'}`} />{u.aktif ? 'Aktif' : 'Nonaktif'}</span></td>
                     <td>
                       <div className="rowacts">
+                        <button type="button" className="link" onClick={() => { setForm({ ...u, usernameLama: u.username }); setError(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Edit</button>
                         <button type="button" className="link" onClick={() => ubah(u, { resetPassword: true })}>Reset sandi</button>
                         {u.id !== saya.id && (
                           <button type="button" className={`link${u.aktif ? ' danger' : ''}`} onClick={() => ubah(u, { aktif: !u.aktif })}>{u.aktif ? 'Nonaktifkan' : 'Aktifkan'}</button>
                         )}
+                        {u.id !== saya.id && <button type="button" className="link danger" onClick={() => setHapus(u)}>Hapus</button>}
                       </div>
                     </td>
                   </tr>
@@ -104,6 +114,25 @@ export default function Pengguna() {
             </table>
           </div>
         </div>
+      )}
+
+      {hapus && (
+        <Konfirmasi
+          judul={`Hapus ${hapus.username}?`}
+          isi={`Akun ${hapus.nama} dihapus permanen dan langsung keluar dari semua perangkat. Akun yang sudah pernah mencatat tap tidak bisa dihapus (agar rekap tetap utuh); nonaktifkan saja.`}
+          labelOk="Hapus akun"
+          bahaya
+          onBatal={() => setHapus(null)}
+          onOk={async () => {
+            try {
+              await api(`/api/pengguna/${hapus.id}`, { method: 'DELETE' });
+              toast(`${hapus.username} dihapus`);
+              if (form?.id === hapus.id) setForm(null);
+              setHapus(null);
+              muat();
+            } catch (e) { setHapus(null); toast(e.message, true); }
+          }}
+        />
       )}
 
       {sandi && (

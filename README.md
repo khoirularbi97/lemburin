@@ -492,6 +492,8 @@ Semua endpoint selain `/health` dan `/api/auth/login` butuh header
 | POST / DELETE | `/api/libur`, `/api/libur/:tanggal` | admin | Kelola hari libur |
 | GET/POST/PUT | `/api/karyawan`, `/api/karyawan/:id` | admin | Kelola karyawan |
 | POST | `/api/karyawan/:id/ganti-qr` | admin | Buat token QR baru |
+| GET | `/api/karyawan/:id/ringkasan-hapus` | admin | Jumlah lembur/pengajuan/data wajah yang ikut terhapus |
+| DELETE | `/api/karyawan/:id` | admin | Hapus permanen. Kalau sudah punya lembur, wajib `{ konfirmasiNik }`; riwayatnya ikut terhapus (untuk karyawan resign pakai nonaktifkan) |
 | GET | `/api/rekap?bulan=YYYY-MM&departemen=` | admin | Rekap bulanan |
 | GET | `/api/rekap/export?bulan=YYYY-MM` | admin | Unduh rekap .xlsx |
 | POST | `/api/rekap/tap` | admin | Tap manual untuk lembur yang lupa di-tap |
@@ -507,7 +509,8 @@ Semua endpoint selain `/health` dan `/api/auth/login` butuh header
 | GET/POST/DELETE | `/api/portal/pengajuan` | karyawan | Lapor & batalkan tap terlewat |
 | POST/DELETE | `/api/portal/push/langganan` | karyawan | Daftar/hapus perangkat notifikasi |
 | GET | `/api/dashboard` | admin | Ringkasan dashboard |
-| GET/POST/PATCH | `/api/pengguna`, `/api/pengguna/:id` | admin | Kelola akun |
+| GET/POST/PATCH | `/api/pengguna`, `/api/pengguna/:id` | admin | Kelola akun: tambah, edit (username, nama, peran, area), aktif/nonaktif, reset sandi. Minimal satu admin aktif dijaga |
+| DELETE | `/api/pengguna/:id` | admin | Hapus akun. Ditolak (409) bila akun sudah mencatat tap/SPL; nonaktifkan saja |
 | GET | `/api/scan/qr-mandiri`, `/api/scan/qr-mandiri/pemakai` | admin, petugas | QR dinamis (berganti 10 detik) & daftar tap lewat QR itu hari ini |
 | GET/POST/DELETE | `/api/portal/tap` | karyawan | Status, tap in / tap out (wajah + QR), batal tap in |
 | GET/POST/DELETE | `/api/portal/wajah` | karyawan | Daftar / cabut data wajah |

@@ -81,6 +81,54 @@ function FormKaryawan({ awal, departemen, onBatal, onSimpan }) {
   );
 }
 
+/** Hapus permanen. Kalau sudah ada catatan lembur, admin wajib mengetik NIK karena riwayatnya ikut terhapus. */
+function HapusKaryawan({ k, onBatal, onSelesai }) {
+  const toast = useToast();
+  const [info, setInfo] = useState(null);
+  const [nik, setNik] = useState('');
+  const [proses, setProses] = useState(false);
+  useEffect(() => { api(`/api/karyawan/${k.id}/ringkasan-hapus`).then(setInfo).catch((e) => { toast(e.message, true); onBatal(); }); }, [k.id, toast, onBatal]);
+  const wajibNik = info?.lembur > 0;
+  const cocok = !wajibNik || nik.trim().toUpperCase() === k.nik;
+  async function hapus() {
+    setProses(true);
+    try {
+      await api(`/api/karyawan/${k.id}`, { method: 'DELETE', body: wajibNik ? { konfirmasiNik: nik } : undefined });
+      toast(`${k.nama} dihapus`);
+      onSelesai();
+    } catch (e) { toast(e.message, true); setProses(false); }
+  }
+  return (
+    <Modal judul={`Hapus ${k.nama}?`} onClose={onBatal}>
+      {!info ? <Memuat teks="Memeriksa data…" /> : (
+        <>
+          <p>Karyawan dihapus permanen{wajibNik ? ' beserta semua data di bawah ini' : ''}. ID card dan akun portalnya langsung tidak berlaku.</p>
+          {wajibNik && (
+            <div className="glass kv">
+              <div><span>Catatan lembur</span><b className="num">{info.lembur}</b></div>
+              {info.pengajuan > 0 && <div><span>Pengajuan tap</span><b className="num">{info.pengajuan}</b></div>}
+              {info.sesi > 0 && <div><span>Tap in terbuka</span><b className="num">{info.sesi}</b></div>}
+              {info.wajah > 0 && <div><span>Data wajah</span><b>ikut dihapus</b></div>}
+            </div>
+          )}
+          {wajibNik && <p style={{ color: 'var(--amberInk)' }}>Rekap, slip, dan ekspor periode lalu akan berubah. Untuk karyawan yang keluar/resign, pakai <b>Nonaktifkan</b> agar riwayatnya tetap ada.</p>}
+          {wajibNik && (
+            <div className="fld">
+              <label htmlFor="hapus-nik">Ketik NIK <b>{k.nik}</b> untuk konfirmasi</label>
+              <input className="input num" id="hapus-nik" autoComplete="off" autoCapitalize="characters" value={nik} onChange={(e) => setNik(e.target.value)} autoFocus />
+            </div>
+          )}
+          <div className="acts">
+            <button type="button" className="btn key" onClick={onBatal}>Batal</button>
+            {wajibNik && k.aktif && <button type="button" className="btn key" onClick={() => onSelesai('nonaktif')}>Nonaktifkan saja</button>}
+            <button type="button" className="btn danger" disabled={!cocok || proses} autoFocus={!wajibNik} onClick={hapus}>{proses ? 'Menghapus…' : 'Hapus permanen'}</button>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
 export default function Karyawan() {
   const toast = useToast();
   const [list, setList] = useState(null);
@@ -91,6 +139,8 @@ export default function Karyawan() {
   const [ganti, setGanti] = useState(null);
   const [resetSandi, setResetSandi] = useState(null);
   const [sandiBaru, setSandiBaru] = useState(null);
+  const [hapus, setHapus] = useState(null);
+  const batalHapus = useCallback(() => setHapus(null), []);
 
   const muat = useCallback(() => api('/api/karyawan').then(setList).catch((e) => toast(e.message, true)), [toast]);
   useEffect(() => {
@@ -164,6 +214,7 @@ export default function Karyawan() {
                         <button type="button" className="link" onClick={() => setGanti(k)}>Ganti QR</button>
                         <button type="button" className="link" onClick={() => setResetSandi(k)}>{k.portal.aktif ? 'Reset sandi portal' : 'Aktifkan portal'}</button>
                         <button type="button" className={`link${k.aktif ? ' danger' : ''}`} onClick={() => aturAktif(k)}>{k.aktif ? 'Nonaktifkan' : 'Aktifkan'}</button>
+                        <button type="button" className="link danger" onClick={() => setHapus(k)}>Hapus</button>
                       </div>
                     </td>
                   </tr>
@@ -176,7 +227,7 @@ export default function Karyawan() {
 
       <div className="glass note">
         <Tile icon="info" warna="t-indigo" size={40} />
-        <span><b>Ganti QR</b> membuat token baru. Kartu lama langsung ditolak saat discan, jadi pakai saat ID card hilang. Buka <b>ID card</b> untuk mencetak atau mengunduh kartu. <b>Portal</b> = akun karyawan untuk melihat lembur sendiri (login NIK + sandi). Pakai <b>Reset sandi portal</b> kalau karyawan lupa sandi.</span>
+        <span><b>Ganti QR</b> membuat token baru. Kartu lama langsung ditolak saat discan, jadi pakai saat ID card hilang. Buka <b>ID card</b> untuk mencetak atau mengunduh kartu. <b>Portal</b> = akun karyawan untuk melihat lembur sendiri (login NIK + sandi). Pakai <b>Reset sandi portal</b> kalau karyawan lupa sandi. Karyawan keluar: <b>Nonaktifkan</b> (riwayat tetap ada). <b>Hapus</b> hanya untuk data salah input.</span>
       </div>
 
       {kartu && (
@@ -209,6 +260,19 @@ export default function Karyawan() {
               setSandiBaru(k);
               muat();
             } catch (e) { toast(e.message, true); }
+          }}
+        />
+      )}
+
+      {hapus && (
+        <HapusKaryawan
+          k={hapus}
+          onBatal={batalHapus}
+          onSelesai={(aksi) => {
+            const k = hapus;
+            setHapus(null);
+            if (form && form !== 'baru' && form.id === k.id) setForm(null);
+            if (aksi === 'nonaktif') aturAktif(k); else muat();
           }}
         />
       )}

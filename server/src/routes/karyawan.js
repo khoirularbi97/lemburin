@@ -86,4 +86,43 @@ router.post('/:id/sudah-dicetak', ah(async (req, res) => {
   res.json(bentuk(k));
 }));
 
+/** Data yang ikut terhapus bila karyawan dihapus. */
+async function ringkasanHapus(id) {
+  const [lembur, pengajuan, sesi, wajah] = await Promise.all([
+    prisma.lembur.count({ where: { karyawanId: id } }),
+    prisma.pengajuanTap.count({ where: { karyawanId: id } }),
+    prisma.sesiLembur.count({ where: { karyawanId: id } }),
+    prisma.wajahKaryawan.count({ where: { karyawanId: id } }),
+  ]);
+  return { lembur, pengajuan, sesi, wajah };
+}
+
+router.get('/:id/ringkasan-hapus', ah(async (req, res) => {
+  res.json(await ringkasanHapus(Number(req.params.id)));
+}));
+
+// Hapus permanen. Kalau karyawan sudah punya catatan lembur, admin wajib mengetik NIK-nya sebagai konfirmasi,
+// karena riwayat lembur, slip, dan pengajuannya ikut terhapus. Untuk karyawan yang keluar, Nonaktifkan lebih aman.
+router.delete('/:id', ah(async (req, res) => {
+  const id = Number(req.params.id);
+  const { konfirmasiNik } = z.object({ konfirmasiNik: z.string().trim().toUpperCase().optional() }).parse(req.body || {});
+  const k = await prisma.karyawan.findUnique({ where: { id } });
+  if (!k) throw new HttpError(404, 'Karyawan tidak ditemukan.');
+  const r = await ringkasanHapus(id);
+  if (r.lembur && konfirmasiNik !== k.nik) {
+    throw new HttpError(400, `Ketik NIK ${k.nik} untuk menghapus ${k.nama} beserta ${r.lembur} catatan lemburnya.`, { kode: 'PERLU_KONFIRMASI', ringkasan: r });
+  }
+  await prisma.$transaction(async (tx) => {
+    // Hapus berurutan (relasi juga cascade di database), supaya jelas apa saja yang hilang
+    await tx.pengajuanTap.deleteMany({ where: { karyawanId: id } });
+    await tx.lembur.deleteMany({ where: { karyawanId: id } });
+    await tx.sesiLembur.deleteMany({ where: { karyawanId: id } });
+    await tx.wajahKaryawan.deleteMany({ where: { karyawanId: id } });
+    await tx.notifikasi.deleteMany({ where: { karyawanId: id } });
+    await tx.langgananPush.deleteMany({ where: { karyawanId: id } });
+    await tx.karyawan.delete({ where: { id } });
+  });
+  res.json({ ok: true, terhapus: r });
+}));
+
 export default router;
