@@ -1,8 +1,10 @@
 # Build aplikasi lemburin untuk Android, Windows, macOS, dan Linux.
 #
-# Jalan otomatis saat push tag versi (mis. v1.0.0) → hasilnya dilampirkan di
-# halaman Releases GitHub. Bisa juga dijalankan manual dari tab Actions →
-# "Build aplikasi" → Run workflow (hasil ada di bagian Artifacts).
+# Jalan otomatis saat push tag versi (mis. v1.0.0) → tiap job langsung melampirkan
+# hasilnya ke halaman Releases GitHub (tidak memakai kuota penyimpanan Artifacts).
+# Bisa juga dijalankan manual dari tab Actions → "Build aplikasi" → Run workflow:
+# hasilnya ada di bagian Artifacts dan otomatis terhapus setelah 3 hari, supaya
+# kuota penyimpanan Actions (500 MB untuk repo privat akun gratis) tidak penuh.
 #
 # Pengaturan repo (Settings → Secrets and variables → Actions):
 #   Variable  LEMBURIN_API_URL           wajib, mis. https://lemburin-api.onrender.com
@@ -31,7 +33,22 @@ env:
   VITE_API_URL: ${{ vars.LEMBURIN_API_URL }}
 
 jobs:
+  # Buat (atau pakai ulang) rilis untuk tag ini lebih dulu, supaya job build bisa
+  # mengunggah langsung ke rilis tanpa saling berebut membuatnya.
+  siapkan-rilis:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Buat rilis
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --title "lemburin $GITHUB_REF_NAME" --generate-notes
+
   android:
+    needs: siapkan-rilis
+    if: ${{ !cancelled() && (needs.siapkan-rilis.result == 'success' || needs.siapkan-rilis.result == 'skipped') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -109,12 +126,22 @@ jobs:
             cp app/build/outputs/apk/debug/app-debug.apk ../../keluaran/lemburin-android-debug.apk
           fi
 
+      - name: Lampirkan ke rilis
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" keluaran/* -R "$GITHUB_REPOSITORY" --clobber
+
       - uses: actions/upload-artifact@v7
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         with:
           name: lemburin-android
           path: keluaran/*
+          retention-days: 3
 
   desktop:
+    needs: siapkan-rilis
+    if: ${{ !cancelled() && (needs.siapkan-rilis.result == 'success' || needs.siapkan-rilis.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
@@ -156,25 +183,23 @@ jobs:
           node scripts/salin-web.cjs
           npx electron-builder --publish never
 
+      - name: Lampirkan ke rilis
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          berkas=(desktop/release/*.exe desktop/release/*.dmg desktop/release/*.AppImage desktop/release/*.deb)
+          gh release upload "$GITHUB_REF_NAME" "${berkas[@]}" -R "$GITHUB_REPOSITORY" --clobber
+
       - uses: actions/upload-artifact@v7
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         with:
           name: lemburin-desktop-${{ runner.os }}
+          retention-days: 3
           path: |
             desktop/release/*.exe
             desktop/release/*.dmg
             desktop/release/*.AppImage
             desktop/release/*.deb
-
-  rilis:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [android, desktop]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          path: hasil
-          merge-multiple: true
-      - uses: softprops/action-gh-release@v3
-        with:
-          files: hasil/*
-          generate_release_notes: true

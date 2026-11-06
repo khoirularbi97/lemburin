@@ -4,6 +4,8 @@
   "version": "1.0.0",
   "description": "lemburin untuk Windows, macOS, dan Linux",
   "author": "lemburin",
+  "homepage": "https://github.com/khoirularbi97/lemburin",
+  "repository": "github:khoirularbi97/lemburin",
   "private": true,
   "main": "main.cjs",
   "scripts": {
@@ -24,6 +26,7 @@
     "appId": "id.lemburin.app",
     "productName": "lemburin",
     "copyright": "lemburin",
+    "publish": [{ "provider": "github", "owner": "khoirularbi97", "repo": "lemburin" }],
     "directories": { "output": "release", "buildResources": "build" },
     "files": ["main.cjs", "app/**/*", "build/icon.png"],
     "artifactName": "lemburin-${version}-${os}-${arch}.${ext}",
