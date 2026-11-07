@@ -132,15 +132,13 @@ router.post('/', ah(async (req, res) => {
   const perId = new Map(karyawan.map((k) => [k.id, k]));
   const area = lingkup(req.user).departemen;
 
-  // Foto diunggah dulu ke Neon Object Storage; kalau gagal, tidak ada lembur yang tercatat
-  let kolomFoto = {};
+  // Foto diunggah dulu ke Neon Object Storage; kalau gagal, disimpan di database (lembur tetap tercatat)
+  let kolomFoto = {}; let peringatanFoto = null;
   if (foto) {
-    try {
-      kolomFoto = await simpanFoto(foto);
-    } catch (e) {
-      console.error('[foto-spl] unggah gagal:', e.name, e.message);
-      throw new HttpError(502, 'Foto SPL gagal diunggah ke penyimpanan. Coba lagi sebentar.');
-    }
+    const f = await simpanFoto(foto);
+    kolomFoto = f.kolom;
+    // Detail konfigurasi hanya untuk admin; petugas cukup tahu fotonya tetap tersimpan
+    if (f.peringatan) peringatanFoto = req.user.role === 'ADMIN' ? f.peringatan : 'Foto disimpan sementara di database karena penyimpanan foto bermasalah. Admin sudah bisa melihat penyebabnya.';
   }
   let spl;
   try {
@@ -196,6 +194,7 @@ router.post('/', ah(async (req, res) => {
     splId: ok.length ? spl.id : null,
     tercatat: ok.length,
     dilewati: hasil.length - ok.length,
+    ...(peringatanFoto && ok.length ? { peringatanFoto } : {}),
     ...(req.user.role === 'ADMIN' ? { totalNominal: ok.reduce((s, h) => s + h.nominal, 0) } : {}),
     hasil,
   });

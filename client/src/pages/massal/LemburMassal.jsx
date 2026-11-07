@@ -549,6 +549,7 @@ export default function LemburMassal({ kecil = false }) {
       {hasil && (
         <Modal judul={hasil.tercatat ? `${hasil.tercatat} lembur tercatat` : 'Tidak ada yang tercatat'} onClose={() => setHasil(null)}>
           {admin && hasil.totalNominal != null && hasil.tercatat > 0 && <p>Total upah lembur {rp(hasil.totalNominal)}.</p>}
+          {hasil.peringatanFoto && <p className="ms-peringatan" role="status">{hasil.peringatanFoto}</p>}
           {hasil.dilewati > 0 && (
             <>
               <p>{hasil.dilewati} karyawan dilewati:</p>

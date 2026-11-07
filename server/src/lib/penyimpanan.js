@@ -9,7 +9,7 @@
 // Kalau belum diisi, foto disimpan di kolom database seperti sebelumnya (cadangan).
 import crypto from 'node:crypto';
 import {
-  DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client,
+  CreateBucketCommand, DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client,
 } from '@aws-sdk/client-s3';
 
 const BUCKET = process.env.STORAGE_BUCKET || '';
@@ -44,14 +44,41 @@ export function buatKunci(mime, tanggal = new Date()) {
   return `spl/${y}/${m}/${crypto.randomUUID()}.${EKSTENSI[mime] || 'bin'}`;
 }
 
+const kodeGalat = (e) => e?.Code || e?.code || e?.cause?.code || (/\b(E[A-Z_]{4,})\b/.exec(e?.message || '')?.[1]) || e?.name || '';
+
 export async function unggah(kunci, buf, mime) {
-  await s3().send(new PutObjectCommand({
+  const kirim = () => s3().send(new PutObjectCommand({
     Bucket: BUCKET,
     Key: kunci,
     Body: buf,
     ContentType: mime,
     CacheControl: 'private, max-age=31536000, immutable',
   }));
+  try {
+    await kirim();
+  } catch (e) {
+    // Bucket belum dibuat di branch ini: buat (privat) lalu ulangi sekali
+    if (kodeGalat(e) !== 'NoSuchBucket') throw e;
+    await s3().send(new CreateBucketCommand({ Bucket: BUCKET }));
+    console.log(`[foto-spl] bucket ${BUCKET} dibuat`);
+    await kirim();
+  }
+}
+
+/** Penjelasan singkat (bahasa Indonesia) kenapa penyimpanan gagal, untuk admin. */
+export function jelaskanGalat(e) {
+  const kode = kodeGalat(e);
+  const status = e?.$metadata?.httpStatusCode;
+  if (kode === 'InvalidAccessKeyId') return 'AWS_ACCESS_KEY_ID tidak dikenali Neon (credential salah atau sudah dihapus)';
+  if (kode === 'SignatureDoesNotMatch') return 'AWS_SECRET_ACCESS_KEY tidak cocok dengan AWS_ACCESS_KEY_ID';
+  if (kode === 'NoSuchBucket') return `bucket "${BUCKET}" tidak ada dan tidak bisa dibuat otomatis`;
+  if (kode === 'AccessDenied' || status === 403) return `credential tidak punya izin storage:write untuk bucket "${BUCKET}"`;
+  if (/AuthorizationHeaderMalformed|PermanentRedirect|IllegalLocationConstraint/i.test(kode)) return `AWS_REGION (${process.env.AWS_REGION || 'kosong'}) tidak cocok dengan endpoint`;
+  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|UND_ERR/i.test(kode) || /getaddrinfo|fetch failed/i.test(e?.message || '')) {
+    return `AWS_ENDPOINT_URL_S3 (${ENDPOINT}) tidak bisa dihubungi`;
+  }
+  if (/SlowDown|ServiceUnavailable|InternalError/i.test(kode) || status >= 500) return 'Neon Object Storage sedang sibuk/gangguan';
+  return `${kode || 'galat'}${e?.message ? `: ${e.message}` : ''}`.slice(0, 200);
 }
 
 /** @returns {Promise<{body: import('node:stream').Readable, mime: string, ukuran?: number}>} */

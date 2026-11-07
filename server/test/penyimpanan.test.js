@@ -9,6 +9,7 @@ import { waktuJakarta } from '../src/lib/lembur.js';
 
 const objek = new Map(); // "/bucket/key" -> { body, tipe }
 const log = [];
+const bucketAda = new Set(); // bucket belum dibuat: unggahan pertama membuatnya otomatis
 const s3 = http.createServer((req, res) => {
   const potong = [];
   req.on('data', (c) => potong.push(c));
@@ -16,6 +17,9 @@ const s3 = http.createServer((req, res) => {
     const p = decodeURIComponent(req.url.split('?')[0]);
     log.push(`${req.method} ${p}`);
     if (!/^AWS4-HMAC-SHA256 Credential=UJI-KEY\//.test(req.headers.authorization || '')) { res.writeHead(403); return res.end(); }
+    const bucket = p.split('/')[1];
+    if (req.method === 'PUT' && p.replace(/\/$/, '') === `/${bucket}`) { bucketAda.add(bucket); res.writeHead(200); return res.end(); }
+    if (!bucketAda.has(bucket)) { res.writeHead(404, { 'Content-Type': 'application/xml' }); return res.end('<Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message></Error>'); }
     if (req.method === 'PUT') { objek.set(p, { body: Buffer.concat(potong), tipe: req.headers['content-type'] }); res.writeHead(200, { ETag: '"x"' }); return res.end(); }
     if (req.method === 'GET') {
       const o = objek.get(p);
@@ -105,10 +109,30 @@ test('foto lebih dari 13 bulan dihapus, data lembur tetap ada', async () => {
   assert.equal(f.status, 410);
 });
 
-test('storage mati: unggah gagal → tidak ada lembur yang tercatat', async () => {
+test('storage mati: foto disimpan di database, lembur tetap tercatat, admin diberi tahu penyebabnya', async () => {
   const sebelum = prisma._db.lembur.length;
   s3.close();
   const r = await api('/api/lembur-massal', { method: 'POST', token, body: { tanggal: kemarin, jam: '19:00', alasan: 'Storage mati', karyawanIds: [2], sumber: 'FOTO', foto: `data:image/webp;base64,${WEBP.toString('base64')}` } });
-  assert.equal(r.status, 502);
-  assert.equal(prisma._db.lembur.length, sebelum);
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  assert.equal(prisma._db.lembur.length, sebelum + 1);
+  assert.match(r.data.peringatanFoto, /tidak bisa dihubungi/);
+  const spl = prisma._db.spl.find((x) => x.id === r.data.splId);
+  assert.equal(spl.fotoKey ?? null, null);
+  assert.ok(Buffer.from(spl.foto).equals(WEBP));
+  const f = await api(`/api/lembur-massal/spl/${spl.id}/foto`, { token });
+  assert.equal(f.status, 200);
+  assert.ok(f.data.equals(WEBP));
+});
+
+test('bucket yang belum ada dibuat otomatis saat unggahan pertama', () => {
+  assert.ok(log.some((l) => /^PUT \/foto-spl\/?$/.test(l)), log.join(', '));
+});
+
+test('penjelasan galat penyimpanan untuk admin', async () => {
+  const { jelaskanGalat } = await import('../src/lib/penyimpanan.js');
+  assert.match(jelaskanGalat({ name: 'InvalidAccessKeyId', $metadata: { httpStatusCode: 403 } }), /AWS_ACCESS_KEY_ID/);
+  assert.match(jelaskanGalat({ name: 'SignatureDoesNotMatch', $metadata: { httpStatusCode: 403 } }), /AWS_SECRET_ACCESS_KEY/);
+  assert.match(jelaskanGalat({ name: 'AccessDenied', $metadata: { httpStatusCode: 403 } }), /storage:write/);
+  assert.match(jelaskanGalat({ name: 'AuthorizationHeaderMalformed' }), /AWS_REGION/);
+  assert.match(jelaskanGalat({ name: 'Error', code: 'ENOTFOUND', message: 'getaddrinfo ENOTFOUND br-x' }), /tidak bisa dihubungi/);
 });

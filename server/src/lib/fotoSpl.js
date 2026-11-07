@@ -7,15 +7,22 @@ export const MASA_SIMPAN_BULAN = Math.max(0, Number(process.env.FOTO_SPL_SIMPAN_
 
 /**
  * Simpan foto lebih dulu (sebelum data lembur dibuat).
- * @returns {Promise<object>} kolom-kolom Spl untuk foto
+ * Kalau Object Storage gagal, foto disimpan di kolom database (foto sudah dikompres ±20–150 KB) supaya
+ * lembur tetap bisa dicatat; penyebabnya dikembalikan sebagai `peringatan` untuk diperbaiki admin.
+ * @returns {Promise<{kolom: object, peringatan?: string}>} kolom-kolom Spl untuk foto
  */
 export async function simpanFoto({ buf, mime }) {
-  if (penyimpanan.storageAktif) {
-    const kunci = penyimpanan.buatKunci(mime);
+  const diDatabase = { foto: buf, fotoMime: mime, fotoUkuran: buf.length };
+  if (!penyimpanan.storageAktif) return { kolom: diDatabase };
+  const kunci = penyimpanan.buatKunci(mime);
+  try {
     await penyimpanan.unggah(kunci, buf, mime);
-    return { fotoKey: kunci, fotoMime: mime, fotoUkuran: buf.length };
+    return { kolom: { fotoKey: kunci, fotoMime: mime, fotoUkuran: buf.length } };
+  } catch (e) {
+    const sebab = penyimpanan.jelaskanGalat(e);
+    console.error('[foto-spl] unggah ke Object Storage gagal, foto disimpan di database:', e.name, e.message);
+    return { kolom: diDatabase, peringatan: `Penyimpanan foto (Neon Object Storage) gagal: ${sebab}. Foto disimpan di database dulu.` };
   }
-  return { foto: buf, fotoMime: mime, fotoUkuran: buf.length };
 }
 
 /** Batalkan foto yang sudah diunggah (mis. tidak ada lembur yang tercatat). */
