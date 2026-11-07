@@ -139,14 +139,14 @@ export default function Scan() {
     e.target.value = '';
     if (!file) return;
     setKirimFoto(true);
-    const fileScanner = new Html5Qrcode(REGION_FILE, { verbose: false });
+    const fileScanner = new Html5Qrcode(REGION_FILE, { verbose: false, experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
     try {
       const teks = await fileScanner.scanFile(file, false);
       sibukRef.current = true;
       kamera.tahan();
       await kirimToken(teks.trim());
     } catch {
-      toast('QR tidak terbaca. Foto lebih dekat, terang, dan tidak miring.', true);
+      toast('QR/barcode tidak terbaca. Pakai foto yang lebih dekat, terang, dan tidak miring.', true);
     } finally {
       fileScanner.clear();
       setKirimFoto(false);
@@ -186,14 +186,18 @@ export default function Scan() {
           </div>
         )}
         <div className="vf-foot">
-          <label className="btn key sm" htmlFor="foto-qr" style={{ flex: 1 }}>
-            <Icon name="camera" size={18} />{kirimFoto ? 'Membaca foto…' : 'Pakai foto QR'}
+          <label className="btn key sm" htmlFor="foto-qr" style={{ flex: 1 }} aria-disabled={kirimFoto}>
+            <Icon name="camera" size={18} />{kirimFoto ? 'Membaca foto…' : 'Foto QR'}
           </label>
-          <input className="sr" type="file" id="foto-qr" accept="image/*" capture="environment" onChange={scanFoto} />
+          <input className="sr" type="file" id="foto-qr" accept="image/*" capture="environment" onChange={scanFoto} disabled={kirimFoto} />
+          <label className="btn key sm" htmlFor="galeri-qr" style={{ flex: 1 }} aria-disabled={kirimFoto}>
+            <Icon name="gambar" size={18} />Dari galeri
+          </label>
+          <input className="sr" type="file" id="galeri-qr" accept="image/*" onChange={scanFoto} disabled={kirimFoto} />
         </div>
       </div>
       <div id={REGION_FILE} hidden />
-      <p className="hint">Arahkan QR di ID card ke kotak. Kalau kamera bermasalah, pakai foto QR.</p>
+      <p className="hint">Arahkan QR di ID card ke kotak. Kalau kamera bermasalah, pakai <b>Foto QR</b>, atau pilih gambar QR/barcode yang sudah ada lewat <b>Dari galeri</b>.</p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 12 }}>
         <div className="glass" style={{ borderRadius: 18, padding: 12, display: 'flex', alignItems: 'center', gap: 12 }}>

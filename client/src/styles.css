@@ -425,3 +425,4 @@ tr.warn td { background: rgba(255, 196, 0, .09); }
 .panel.eksklusif { gap: 10px; }
 .ms-peringatan { margin: 0; padding: 10px 12px; border-radius: 12px; background: #FFF4DC; color: #7A4B00; font-size: 13px; line-height: 1.45; }
 .ms-peringatan b { color: #5C3700; }
+label.btn[aria-disabled="true"] { opacity: .55; pointer-events: none; }

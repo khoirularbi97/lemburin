@@ -54,7 +54,8 @@ export function useKamera(regionId, onDecode) {
     let errAkhir = null;
 
     for (let i = 0; i < pilihan.length && i < 5; i += 1) {
-      const s = new Html5Qrcode(regionId, { verbose: false });
+      // Pakai pembaca barcode bawaan HP (BarcodeDetector) kalau ada: lebih cepat & lebih tahan foto buram
+      const s = new Html5Qrcode(regionId, { verbose: false, experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
       try {
         await s.start(pilihan[i], config, saatTerbaca, () => {});
         if (!ref.current.hidup) {

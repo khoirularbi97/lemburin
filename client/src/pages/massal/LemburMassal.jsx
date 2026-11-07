@@ -135,12 +135,14 @@ function UnggahFoto({ onHasil, karyawanSemua, awan, alasanTanpaAwan }) {
         <>
           <label className="ms-drop" htmlFor="foto-spl">
             <span className="tile t-indigo" style={{ width: 54, height: 54, borderRadius: 16 }}><Icon name="camera" /></span>
-            <b>Foto atau pilih gambar SPL</b>
+            <b>Foto SPL dengan kamera</b>
             <span className="muted">{awan
               ? 'Formulir SPL (SNY-FRM-HRD-006): nama, jam, dan alasan per baris dibaca otomatis, termasuk tulisan tangan. Anda periksa dulu sebelum disimpan.'
               : 'Nomor, tanggal, jam, dan nama/NIK karyawan dibaca otomatis (tulisan cetak). Anda periksa dulu sebelum disimpan.'}</span>
           </label>
           <input className="sr" type="file" id="foto-spl" accept="image/*" capture="environment" onChange={pilih} />
+          <label className="btn key" htmlFor="galeri-spl"><Icon name="gambar" size={18} />Pilih foto SPL dari galeri</label>
+          <input className="sr" type="file" id="galeri-spl" accept="image/*" onChange={pilih} />
           <ul className="hint ms-tips">
             <li>Letakkan SPL di permukaan datar, terang, tanpa bayangan; foto tegak lurus dari atas.</li>
             <li>Tulisan cetak/ketik paling akurat. Tulisan tangan sering perlu dicentang manual.</li>
