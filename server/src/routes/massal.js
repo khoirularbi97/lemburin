@@ -39,7 +39,7 @@ router.get('/batas', ah(async (req, res) => {
 // Batas sederhana per pengguna supaya tidak menghabiskan kuota.
 const terakhirBaca = new Map();
 router.post('/baca-spl', ah(async (req, res) => {
-  const { gambar, jumlahBaris } = z.object({ gambar: z.string().max(4_000_000), jumlahBaris: z.number().int().min(1).max(60).optional() }).parse(req.body);
+  const { gambar, jumlahBaris } = z.object({ gambar: z.string().max(4_000_000), jumlahBaris: z.number().int().min(1).max(60).optional().nullable() }).parse(req.body);
   const m = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(gambar);
   if (!m) throw new HttpError(400, 'Gambar harus JPEG, PNG, atau WEBP.');
   const buf = Buffer.from(m[2], 'base64');
@@ -47,9 +47,7 @@ router.post('/baca-spl', ah(async (req, res) => {
   const t = terakhirBaca.get(req.user.id) || 0;
   if (Date.now() - t < 3000) throw new HttpError(429, 'Tunggu sebentar sebelum membaca lagi.');
   terakhirBaca.set(req.user.id, Date.now());
-  if (groqAktif || geminiAktif) {
-    if (!jumlahBaris) throw new HttpError(400, 'jumlahBaris wajib. Muat ulang aplikasi.');
-  }
+  // jumlahBaris kosong = foto utuh (tabel tidak terpotong otomatis di HP): Groq/Gemini membaca seluruh tabel
   if (groqAktif) {
     const hasil = await bacaSplGroq(buf, `image/${m[1]}`, jumlahBaris);
     return res.json({ ...hasil, pemakaian: await pemakaianGroq() });

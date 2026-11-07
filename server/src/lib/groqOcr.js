@@ -2,8 +2,9 @@
 // Daftar gratis di console.groq.com tanpa kartu; Groq tidak menyimpan isi permintaan secara bawaan.
 // Env:
 //   GROQ_API_KEY          kunci dari console.groq.com → API Keys
-//   GROQ_MODEL            bawaan qwen/qwen3.6-27b (model vision di Groq). Kalau model yang diisi tidak ada,
-//                         otomatis dicoba ulang dengan model bawaan.
+//   GROQ_MODEL            bawaan qwen/qwen3.8-27b (model vision di Groq). Kalau model yang diisi tidak ada
+//                         (Groq rutin memensiunkan model), server mencari model vision Qwen terbaru yang
+//                         tersedia lewat daftar model Groq dan memakainya.
 //   GROQ_BATAS_HARIAN     batas baca SPL per hari (bawaan 100)
 // Yang dikirim hanya potongan kolom tabel SPL (tanpa kop perusahaan & tanda tangan).
 import { prisma } from './prisma.js';
@@ -12,7 +13,7 @@ import { HttpError } from './util.js';
 import { perintah, rapikanTabel } from './geminiOcr.js';
 
 const KUNCI = process.env.GROQ_API_KEY || '';
-export const MODEL_BAWAAN = 'qwen/qwen3.6-27b';
+export const MODEL_BAWAAN = 'qwen/qwen3.8-27b';
 const MODEL_ENV = (process.env.GROQ_MODEL || '').trim() || MODEL_BAWAAN;
 // Model yang sedang dipakai; diganti ke MODEL_BAWAAN kalau MODEL_ENV ternyata tidak ada di Groq
 let MODEL = MODEL_ENV;
@@ -36,11 +37,11 @@ async function catat() {
 
 const CONTOH_JSON = '{"hari":"","tanggal":"","baris":[{"no":1,"nama":"","bagian":"","mulai":"","selesai":"","alasan":""}]}';
 
-function tubuh(buf, mime, jumlahBaris, sembunyikanNalar) {
+function tubuh(buf, mime, jumlahBaris, sembunyikanNalar, maksToken = 6000) {
   const t = {
     model: MODEL,
     temperature: 0,
-    max_completion_tokens: 6000,
+    max_completion_tokens: maksToken,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: `Kamu juru ketik yang menyalin formulir tulisan tangan. Jawab HANYA dengan JSON berbentuk: ${CONTOH_JSON}` },
@@ -55,6 +56,22 @@ function tubuh(buf, mime, jumlahBaris, sembunyikanNalar) {
 }
 
 const tidur = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Model vision pengganti dari daftar model Groq: Qwen 27B versi tertinggi, lalu model vision lain yang dikenal. */
+async function cariModelPengganti(kecuali) {
+  try {
+    const r = await fetch(`${ENDPOINT}/openai/v1/models`, { headers: { Authorization: `Bearer ${KUNCI}` }, signal: AbortSignal.timeout(15000) });
+    const j = await r.json().catch(() => null);
+    const ada = (j?.data || []).filter((m) => m?.active !== false).map((m) => m.id).filter((id) => id && !kecuali.has(id));
+    const versi = (id) => Number(/^qwen\/qwen(\d+(?:\.\d+)?)-27b$/.exec(id)?.[1] || 0);
+    const qwen = ada.filter((id) => versi(id) > 0).sort((a, b) => versi(b) - versi(a));
+    if (qwen.length) return { model: qwen[0], ada };
+    const lain = ada.find((id) => /vision|\bvl\b|-vl-|llama-4|scout|maverick/i.test(id));
+    return { model: lain || null, ada };
+  } catch {
+    return { model: null, ada: [] };
+  }
+}
 
 /** Ambil objek JSON dari jawaban (buang blok <think> atau ```json kalau ada). */
 function ambilJson(teks) {
@@ -79,12 +96,13 @@ export async function bacaSplGroq(buf, mime, jumlahBaris) {
   }
   const url = `${ENDPOINT}/openai/v1/chat/completions`;
   let res; let json; let isi = null; let nalar = true;
+  const dicoba = new Set(); let pindahModel = 0; let tersedia = []; let maksToken = 6000;
   for (let coba = 0; coba < 4; coba += 1) {
     try {
       res = await fetch(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${KUNCI}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(tubuh(buf, mime, jumlahBaris, nalar)),
+        body: JSON.stringify(tubuh(buf, mime, jumlahBaris, nalar, maksToken)),
         signal: AbortSignal.timeout(60000),
       });
     } catch (e) {
@@ -92,10 +110,20 @@ export async function bacaSplGroq(buf, mime, jumlahBaris) {
     }
     json = await res.json().catch(() => null);
     const pesan = json?.error?.message || '';
-    // Model di GROQ_MODEL tidak ada (salah ketik / sudah dihapus Groq): pakai model bawaan
-    if ((res.status === 404 || /model.*(not found|does not exist|decommissioned)/i.test(pesan)) && MODEL !== MODEL_BAWAAN) {
-      console.warn(`[groq] model ${MODEL} tidak tersedia, beralih ke ${MODEL_BAWAAN}. Perbaiki GROQ_MODEL di Render.`);
-      MODEL = MODEL_BAWAAN;
+    // Model tidak ada (salah ketik / sudah dipensiunkan Groq): coba model bawaan, lalu cari dari daftar model Groq
+    if (res.status === 404 || /model.*(not found|does not exist|decommissioned|deprecated)/i.test(pesan)) {
+      dicoba.add(MODEL);
+      let ganti = !dicoba.has(MODEL_BAWAAN) ? MODEL_BAWAAN : null;
+      if (!ganti) { const c = await cariModelPengganti(dicoba); ganti = c.model; tersedia = c.ada; }
+      if (ganti && pindahModel < 3) {
+        console.warn(`[groq] model ${MODEL} tidak tersedia, beralih ke ${ganti}. Perbarui GROQ_MODEL di Render.`);
+        MODEL = ganti; pindahModel += 1; coba -= 1;
+        continue;
+      }
+    }
+    // Akun gratis: batas token per menit kecil, dan jatah jawaban ikut dihitung → minta jawaban lebih pendek
+    if ((res.status === 413 || res.status === 429) && /request too large|tokens per minute|\bTPM\b/i.test(pesan) && maksToken > 3000) {
+      maksToken = 3000; coba -= 1;
       continue;
     }
     // Model yang bukan model "nalar" menolak reasoning_format: ulangi tanpa itu
@@ -118,7 +146,8 @@ export async function bacaSplGroq(buf, mime, jumlahBaris) {
     const pesan = json?.error?.message || `Groq menjawab ${res.status}`;
     if (res.status === 401 || res.status === 403) throw new HttpError(502, 'Kunci Groq ditolak. Periksa GROQ_API_KEY di Render.', { kode: 'GROQ_KUNCI' });
     if (res.status === 404 || /model.*(not found|does not exist|decommissioned)/i.test(pesan)) {
-      throw new HttpError(502, `Model ${MODEL} tidak tersedia di Groq. Ganti GROQ_MODEL ke model vision yang ada di console.groq.com.`, { kode: 'GROQ_MODEL' });
+      const daftar = tersedia.length ? ` Model yang tersedia di akun Anda: ${tersedia.slice(0, 8).join(', ')}.` : '';
+      throw new HttpError(502, `Model ${[...dicoba].join(' / ') || MODEL} tidak tersedia di Groq dan tidak ada model vision pengganti.${daftar} Isi GROQ_MODEL di Render dengan model vision yang ada di console.groq.com/docs/models.`, { kode: 'GROQ_MODEL' });
     }
     if (res.status === 413) throw new HttpError(413, 'Potongan SPL terlalu besar untuk Groq.', { kode: 'GROQ_GAGAL' });
     if (res.status === 429 && /per day|\bRPD\b|TPD/i.test(pesan)) {

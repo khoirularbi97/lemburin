@@ -19,20 +19,35 @@ function kemarin(min) {
 
 const NAMA_PEMBACA = { GROQ: 'Groq', GEMINI: 'Gemini', AZURE: 'Azure' };
 
+/** Foto utuh diperkecil (sisi terpanjang maks. 1600 px) untuk dibaca Groq/Gemini tanpa dipotong. */
+function fotoUtuh(img) {
+  const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85);
+}
+
 /** Baca SPL lewat Groq/Gemini/Azure: potong kolom → kirim → petakan baris. { gagal } = pakai pembaca lokal. */
 async function bacaLewatAwan(file, karyawan, setProgres, toast, jenis) {
   setProgres({ persen: 10, tahap: 'Mencari tabel SPL…' });
   const { siapkanSpl } = await import('../../lib/potongSpl.js');
   const spl = await siapkanSpl(file);
-  if (spl.gagal) {
+  // Garis tabel tidak terdeteksi (mis. foto layar monitor): Groq/Gemini tetap bisa membaca foto utuh
+  const utuh = spl.gagal && (jenis === 'GROQ' || jenis === 'GEMINI');
+  if (spl.gagal && !utuh) {
     toast('Tabel SPL tidak terdeteksi. Foto ulang lebih lurus & seluruh tabel terlihat. Dipakai pembaca lokal dulu.', true);
     return { gagal: 'garis tabel SPL tidak terdeteksi di foto (foto miring, terpotong, atau kurang terang)' };
   }
-  setProgres({ persen: 45, tahap: `Membaca tulisan tangan (${NAMA_PEMBACA[jenis]})…` });
-  const jumlahBaris = spl.tabel.baris.length - 1;
+  setProgres({ persen: 45, tahap: `Membaca ${utuh ? 'seluruh foto' : 'tulisan tangan'} (${NAMA_PEMBACA[jenis]})…` });
+  let jumlahBaris = utuh ? null : spl.tabel.baris.length - 1;
   let r;
   try {
-    r = await api('/api/lembur-massal/baca-spl', { method: 'POST', body: { gambar: spl.gambar, jumlahBaris } });
+    r = await api('/api/lembur-massal/baca-spl', { method: 'POST', body: utuh ? { gambar: fotoUtuh(spl.img) } : { gambar: spl.gambar, jumlahBaris } });
+    if (utuh) {
+      jumlahBaris = r.baris?.length || 0;
+      if (!jumlahBaris) return { gagal: `${NAMA_PEMBACA[jenis]} tidak menemukan tabel SPL di foto` };
+    }
   } catch (e) {
     toast(`${e.message} Dipakai pembaca lokal.`, true);
     return { gagal: e.message };
@@ -65,7 +80,8 @@ async function bacaLewatAwan(file, karyawan, setProgres, toast, jenis) {
     fotoDataUrl: kompresBukti(spl.img),
     teks,
     pemakaian: r.pemakaian,
-    baris: peta.baris.map((b) => ({ ...b, potongan: spl.potongNama(b.no - 1) })),
+    baris: peta.baris.map((b) => ({ ...b, potongan: utuh ? null : spl.potongNama(b.no - 1) })),
+    utuh,
     baca: { nomor: null, tanggal: peta.tanggal, jam: peta.jamUmum, keterangan: peta.alasanUmum, cocok: [] },
   };
 }
@@ -357,7 +373,7 @@ export default function LemburMassal({ kecil = false }) {
             </div>
           </div>
           {foto.awan
-            ? <p className="hint">Dibaca {NAMA_PEMBACA[foto.jenis]}{foto.pemakaian ? ` · kuota ${foto.pemakaian.periode === 'hari' ? 'hari' : 'bulan'} ini ${foto.pemakaian.jumlah}/${foto.pemakaian.batas}` : ''}. Periksa tiap baris di bawah: baris kuning belum dicocokkan otomatis.</p>
+            ? <p className="hint">Dibaca {NAMA_PEMBACA[foto.jenis]}{foto.utuh ? ' dari foto utuh (garis tabel tidak terdeteksi, jadi tidak ada potongan nama per baris)' : ''}{foto.pemakaian ? ` · kuota ${foto.pemakaian.periode === 'hari' ? 'hari' : 'bulan'} ini ${foto.pemakaian.jumlah}/${foto.pemakaian.batas}` : ''}. Periksa tiap baris di bawah: baris kuning belum dicocokkan otomatis.</p>
             : (
               <>
                 <p className="ms-peringatan" role="status"><b>Dibaca pembaca lokal</b>, yang hanya cocok untuk huruf cetak dan hasilnya kurang akurat untuk tulisan tangan.{foto.alasanLokal ? <> Penyebab: {foto.alasanLokal}.</> : ''}</p>

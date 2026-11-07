@@ -41,7 +41,7 @@ process.env.JWT_SECRET = 'rahasia-uji';
 process.env.GEMINI_ENDPOINT = `http://127.0.0.1:${gemini.address().port}`;
 process.env.GEMINI_API_KEY = 'kunci-gemini-uji';
 process.env.GEMINI_MODEL = 'gemini-uji-flash';
-process.env.GEMINI_BATAS_HARIAN = '5';
+process.env.GEMINI_BATAS_HARIAN = '6';
 // Azure juga diatur: Gemini harus tetap didahulukan
 process.env.AZURE_VISION_ENDPOINT = 'http://127.0.0.1:9';
 process.env.AZURE_VISION_KEY = 'tidak-dipakai';
@@ -74,7 +74,7 @@ test('batas memberi tahu pembaca Gemini (didahulukan dari Azure) dan batas haria
   assert.equal(r.data.pembaca.jenis, 'GEMINI');
   assert.equal(r.data.pembaca.model, 'gemini-uji-flash');
   assert.equal(r.data.pembaca.periode, 'hari');
-  assert.equal(r.data.pembaca.sisa, 5);
+  assert.equal(r.data.pembaca.sisa, 6);
 });
 
 test('potongan SPL dikirim ke Gemini dengan skema JSON, hasil dirapikan per baris', async () => {
@@ -99,9 +99,11 @@ test('potongan SPL dikirim ke Gemini dengan skema JSON, hasil dirapikan per bari
   assert.equal(p.body.generationConfig.temperature, 0);
 });
 
-test('jumlahBaris wajib, dan model yang menolak pengaturan thinking diulang tanpa itu', async () => {
+test('tanpa jumlahBaris = foto utuh, dan model yang menolak pengaturan thinking diulang tanpa itu', async () => {
   await tidur(3100);
-  assert.equal((await api('/api/lembur-massal/baca-spl', { method: 'POST', body: { gambar: PNG } })).status, 400);
+  const utuh = await api('/api/lembur-massal/baca-spl', { method: 'POST', body: { gambar: PNG } });
+  assert.equal(utuh.status, 200);
+  assert.match(permintaan.at(-1).body.contents[0].parts[1].text, /foto layar komputer/);
   mode = 'tolakThinking';
   await tidur(3100);
   const n = permintaan.length;

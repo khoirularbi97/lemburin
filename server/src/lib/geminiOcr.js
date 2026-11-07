@@ -52,6 +52,18 @@ const SKEMA = {
 };
 
 export function perintah(jumlahBaris) {
+  // Foto utuh (tabel tidak bisa dipotong otomatis di HP, mis. foto layar monitor): baca seluruh tabel
+  if (!jumlahBaris) {
+    return [
+      'Gambar ini foto formulir Surat Perintah Lembur (SPL) dari sebuah pabrik di Indonesia. Bisa foto kertas (tulisan tangan atau cetak) atau foto layar komputer; mungkin miring.',
+      'Cari baris "Hari" dan "Tanggal" di atas tabel.',
+      'Tabel berisi kolom: NO, NAMA, BAGIAN, JAM MULAI, JAM SELESAI, ALASAN LEMBUR (judul kolom bisa sedikit berbeda, mis. "JAM LEMBUR MULAI / SELESAI").',
+      'Tugas: salin setiap baris tabel yang berisi nama, apa adanya (transkripsi). Jangan menebak, memperbaiki ejaan, atau melengkapi nama yang disingkat.',
+      'Tanda "sama dengan atas" (tanda kutip ", 〃, garis -, coretan, panah ke bawah) ditulis sebagai satu karakter ".',
+      'Sel kosong ditulis "". Jam ditulis seperti di formulir, mis. "18.30". Abaikan kop perusahaan, tanda tangan, dan apa pun di luar formulir (taskbar, ikon).',
+      'no = nomor di kolom NO; kalau tidak ada, urutan dari atas mulai 1. Lewati baris yang benar-benar kosong.',
+    ].join('\n');
+  }
   return [
     'Gambar ini potongan formulir Surat Perintah Lembur (SPL) yang ditulis tangan, dari sebuah pabrik di Indonesia.',
     'Bagian paling atas berisi baris "Hari" dan "Tanggal".',
@@ -140,6 +152,13 @@ export async function bacaSplGemini(buf, mime, jumlahBaris) {
 /** Rapikan jawaban model: tepat jumlahBaris baris, urut menurut "no". Dipakai Gemini & Groq. */
 export function rapikanTabel(isi, jumlahBaris) {
   const s = (v) => (typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '');
+  if (!jumlahBaris) {
+    // Foto utuh: jumlah baris mengikuti hasil baca (maks. 60)
+    const asal = Array.isArray(isi?.baris) ? isi.baris : [];
+    const nomor = asal.map((r, i) => (Number.isInteger(r?.no) && r.no >= 1 ? r.no : i + 1));
+    jumlahBaris = Math.min(60, Math.max(0, ...nomor, asal.length));
+    if (!jumlahBaris) return { hari: s(isi?.hari), tanggal: s(isi?.tanggal), baris: [] };
+  }
   const baris = Array.from({ length: jumlahBaris }, (_, i) => ({ no: i + 1, nama: '', bagian: '', mulai: '', selesai: '', alasan: '' }));
   (Array.isArray(isi?.baris) ? isi.baris : []).forEach((r, i) => {
     // Nomor di luar tabel dibuang; tanpa nomor → pakai urutan
