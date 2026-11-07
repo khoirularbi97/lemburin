@@ -239,6 +239,7 @@ export default function Rekap() {
                                               <span className={`badge ${x.jenisHari === 'KERJA' ? 'b-ok' : 'b-warn'}`}>{x.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur'}</span>
                                               {x.manual && <span className="badge b-ink" title={x.alasan || ''}>{x.spl ? (x.spl.sumber === 'FOTO' ? 'Foto SPL' : 'Massal') : 'Manual'}</span>}
                                               {x.sumber === 'MANDIRI' && <span className="badge b-mute">Mandiri</span>}
+                                              {x.sumber === 'EKSKLUSIF' && <span className="badge b-warn" title="Tap sendiri dengan ID card (izin eksklusif)">Eksklusif</span>}
                                             </span>
                                             {x.manual && x.alasan && <div className="muted" style={{ fontSize: 12, marginTop: 4, maxWidth: 260 }}>{x.alasan}</div>}
                                             {x.spl?.adaFoto && <button type="button" className="link" style={{ fontSize: 12 }} onClick={() => setFotoSpl(x.spl)}>Lihat foto SPL</button>}

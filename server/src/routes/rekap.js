@@ -97,7 +97,7 @@ router.get('/export', ah(async (req, res) => {
   wd.addRow(['Tanggal', 'Jam tap', 'Mulai', 'Selesai', 'Menit lembur', 'Rincian tarif', 'Karyawan', 'NIK', 'Departemen', 'Jenis hari', 'Jam hitung', 'Upah sejam', 'Nominal', 'Sumber', 'Dicatat oleh', 'Alasan manual']).font = { bold: true };
   for (const r of rows) {
     for (const t of r.taps) {
-      const sumber = t.sumber === 'MANDIRI' ? 'Tap mandiri (wajah + QR)' : t.spl ? (t.spl.sumber === 'FOTO' ? 'Foto SPL' : 'Input massal') : t.manual ? 'Manual' : 'Scan QR';
+      const sumber = t.sumber === 'MANDIRI' ? 'Tap mandiri (wajah + QR)' : t.sumber === 'EKSKLUSIF' ? 'Tap eksklusif (wajah + ID card)' : t.spl ? (t.spl.sumber === 'FOTO' ? 'Foto SPL' : 'Input massal') : t.manual ? 'Manual' : 'Scan QR';
       const rinci = t.rincian ? t.rincian.map((x) => `${x.jam}j×${x.kali}`).join(' + ') : 'Tetap (5,5 / 14)';
       wd.addRow([t.tanggal, t.jam, t.jamMulai || '', t.jamSelesai || '', t.menitLembur ?? '', rinci, r.karyawan.nama, r.karyawan.nik, r.karyawan.departemen, t.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur', t.jamHitung, t.upahSejam, t.nominal, sumber, t.petugas, t.alasan || '']);
     }

@@ -266,6 +266,15 @@ mencabut persetujuan (data wajah dihapus) kapan saja; admin menghapus data wajah
 Catatan keamanan: verifikasi wajah berjalan di HP karyawan, jadi aplikasi yang dimodifikasi secara teori bisa
 mengirim data palsu; QR dinamis + area petugas + persetujuan admin + rekap tetap diperiksa HRD.
 
+**Tap eksklusif (tanpa petugas):** admin memberi izin per karyawan di **Tap mandiri & wajah → Tap eksklusif**
+(berlaku sampai tanggal tertentu, maks. 1 tahun, wajib alasan). Karyawan berizin cukup **scan sekali**:
+verifikasi wajah → **scan ID card miliknya** (kartu orang lain / kartu lama ditolak) → lembur langsung tercatat
+dan **dihitung seperti scan petugas** (hari kerja 5,5 jam, Sabtu/Minggu/tanggal merah 14 jam hitung; satu lembur
+per hari). Lokasi HP **dicatat** (tidak memblokir; izin lokasi ditolak tetap boleh tap). Kalau admin mengisi
+**titik lokasi pabrik** + radius, jarak HP ke pabrik ikut disimpan dan tap di luar radius (setelah memperhitungkan
+akurasi GPS) ditandai "di luar area". Lembur berlabel **Eksklusif** di rekap/Excel; admin pemberi izin tercatat
+sebagai penanggung jawab.
+
 ### Pembaca SPL tulisan tangan (Groq) — gratis, tanpa kartu
 
 Urutan pembaca: **Groq → Gemini → Azure → pembaca lokal di HP** (yang pertama diatur yang dipakai;
@@ -513,8 +522,10 @@ Semua endpoint selain `/health` dan `/api/auth/login` butuh header
 | DELETE | `/api/pengguna/:id` | admin | Hapus akun. Ditolak (409) bila akun sudah mencatat tap/SPL; nonaktifkan saja |
 | GET | `/api/scan/qr-mandiri`, `/api/scan/qr-mandiri/pemakai` | admin, petugas | QR dinamis (berganti 10 detik) & daftar tap lewat QR itu hari ini |
 | GET/POST/DELETE | `/api/portal/tap` | karyawan | Status, tap in / tap out (wajah + QR), batal tap in |
+| POST | `/api/portal/tap-eksklusif` | karyawan berizin | Sekali scan wajah + ID card sendiri `{ kartu, vektor, hidup, lokasi }`, dihitung 5,5 / 14 jam |
 | GET/POST/DELETE | `/api/portal/wajah` | karyawan | Daftar / cabut data wajah |
 | GET/POST/DELETE | `/api/mandiri/wajah…`, `/api/mandiri/sesi…`, GET/PUT `/api/mandiri/aturan` | admin | Persetujuan wajah, tap in berjalan, aturan hitung |
+| GET `/api/mandiri/eksklusif`, PUT/DELETE `/api/mandiri/eksklusif/:karyawanId`, PUT `/api/mandiri/lokasi-pabrik` | | admin | Izin tap eksklusif, titik pabrik, daftar tap eksklusif + lokasi |
 | GET | `/api/lembur-massal/batas` | admin, petugas | Batas tanggal, daftar karyawan, pembaca (Azure/lokal) |
 | POST | `/api/lembur-massal/baca-spl` | admin, petugas | Baca potongan SPL lewat Groq/Gemini/Azure (kunci di server) |
 | POST | `/api/lembur-massal` | admin, petugas | Simpan lembur massal (+ jam/alasan per karyawan, foto SPL) |

@@ -66,6 +66,11 @@ model Karyawan {
   /// Token login yang dibuat sebelum waktu ini ditolak (setelah ganti/reset sandi)
   sandiDiubah     DateTime?
   loginTerakhir   DateTime?
+  /// Izin tap eksklusif: scan ID card sendiri + wajah (sekali scan, dihitung seperti scan petugas). Kosong = tidak punya izin
+  eksklusifSampai DateTime?
+  eksklusifAlasan String?
+  /// Admin pemberi izin, juga dicatat sebagai penanggung jawab (petugasId) pada lembur eksklusif
+  eksklusifOlehId Int?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   lembur          Lembur[]

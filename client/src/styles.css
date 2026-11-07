@@ -410,3 +410,9 @@ body:has(.tabs) .toast { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); 
 .ms-pratinjau { font-size: 12.5px; color: var(--muted); }
 .list .li.baru { background: linear-gradient(90deg, var(--tealSoft), transparent); border-radius: 12px; animation: kedip 1s ease-in-out 3; }
 @keyframes kedip { 50% { background: var(--amberSoft); } }
+
+/* Tap eksklusif */
+.tb-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 16px; }
+.tb-head b { font-size: 15px; }
+tr.warn td { background: rgba(255, 196, 0, .09); }
+.panel.eksklusif { gap: 10px; }

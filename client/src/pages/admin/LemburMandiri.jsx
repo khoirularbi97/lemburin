@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../../api.js';
 import { Avatar, Konfirmasi, Memuat, Modal, useToast } from '../../components/ui.jsx';
-import { jamFmt, rp } from '../../format.js';
+import Icon from '../../components/Icon.jsx';
+import { jamFmt, rp, tanggalPendek } from '../../format.js';
+import { teksLokasi } from '../../lib/lokasi.js';
 import { hitungLemburAktual } from '../../lib/hitungAktual.js';
 
 const HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
@@ -210,6 +212,143 @@ function Aturan() {
   );
 }
 
+const hariIniWIB = () => new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
+const tambahHari = (t, n) => { const d = new Date(`${t}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+/** Tanggal 20 terdekat (akhir periode gaji 21–20). */
+const akhirPeriode = () => { const t = hariIniWIB(); const [y, m, dd] = t.split('-').map(Number); const d = new Date(Date.UTC(y, m - 1 + (dd > 20 ? 1 : 0), 20)); return d.toISOString().slice(0, 10); };
+const peta = (l) => (l?.lat != null ? `https://www.google.com/maps?q=${l.lat},${l.lng}` : null);
+
+function Lokasi({ l }) {
+  if (!l) return <span className="muted">—</span>;
+  const url = peta(l);
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 2 }}>
+      <span className={l.jauh ? 'err' : l.gagal ? 'muted' : ''}>{teksLokasi(l)}</span>
+      {url && <a className="link" href={url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>Lihat di peta{l.akurasi ? ` (±${l.akurasi} m)` : ''}</a>}
+    </span>
+  );
+}
+
+function Eksklusif() {
+  const toast = useToast();
+  const [d, setD] = useState(null);
+  const [karyawan, setKaryawan] = useState([]);
+  const [form, setForm] = useState(null);
+  const [lok, setLok] = useState(null);
+  const [cabut, setCabut] = useState(null);
+  const muat = useCallback(() => api('/api/mandiri/eksklusif').then((r) => { setD(r); setLok(r.lokasiPabrik ? { ...r.lokasiPabrik } : { nama: 'Pabrik', lat: '', lng: '', radiusM: 300 }); }).catch((e) => toast(e.message, true)), [toast]);
+  useEffect(() => { muat(); api('/api/karyawan').then((l) => setKaryawan(l.filter((k) => k.aktif))).catch(() => {}); }, [muat]);
+  if (!d) return <Memuat />;
+
+  const simpanIzin = async (e) => {
+    e.preventDefault();
+    try {
+      await api(`/api/mandiri/eksklusif/${form.karyawanId}`, { method: 'PUT', body: { sampai: form.sampai, alasan: form.alasan } });
+      toast('Izin tap eksklusif disimpan');
+      setForm(null); muat();
+    } catch (er) { toast(er.message, true); }
+  };
+  const simpanLokasi = async (hapus) => {
+    try {
+      const body = hapus ? { lokasiPabrik: null } : { lokasiPabrik: { nama: lok.nama || 'Pabrik', lat: Number(lok.lat), lng: Number(lok.lng), radiusM: Number(lok.radiusM) || 300 } };
+      if (!hapus && (!Number.isFinite(body.lokasiPabrik.lat) || !Number.isFinite(body.lokasiPabrik.lng) || lok.lat === '' || lok.lng === '')) { toast('Isi garis lintang & bujur, atau pakai lokasi HP ini.', true); return; }
+      await api('/api/mandiri/lokasi-pabrik', { method: 'PUT', body });
+      toast(hapus ? 'Titik pabrik dihapus' : 'Titik pabrik disimpan');
+      muat();
+    } catch (er) { toast(er.message, true); }
+  };
+  const pakaiHpIni = () => {
+    if (!navigator.geolocation) { toast('Perangkat ini tidak mendukung lokasi.', true); return; }
+    navigator.geolocation.getCurrentPosition(
+      (p) => { setLok((x) => ({ ...x, lat: Math.round(p.coords.latitude * 1e6) / 1e6, lng: Math.round(p.coords.longitude * 1e6) / 1e6 })); toast(`Lokasi diambil (±${Math.round(p.coords.accuracy)} m). Klik Simpan.`); },
+      () => toast('Lokasi tidak bisa diambil. Izinkan akses lokasi, atau isi manual dari Google Maps.', true),
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  };
+  const sudahIzin = new Set(d.izin.map((i) => i.karyawan.id));
+
+  return (
+    <>
+      <div className="glass note"><span className="tile t-amber"><Icon name="card" /></span><div>
+        <b>Tap eksklusif</b> = karyawan scan ID card miliknya sendiri (+ verifikasi wajah) tanpa petugas. Cukup sekali scan, dihitung seperti scan petugas (5,5 / 14 jam hitung). Berikan hanya untuk yang lembur saat petugas tidak ada.
+        Lokasi HP <b>dicatat, tidak memblokir</b>: periksa tap yang ditandai <span className="err">di luar area</span>. Admin pemberi izin tercatat sebagai penanggung jawab.
+      </div></div>
+
+      <div className="glass tablebox">
+        <div className="tb-head"><b>Karyawan dengan izin</b>{!form && <button type="button" className="btn sm" onClick={() => setForm({ karyawanId: '', sampai: akhirPeriode() < hariIniWIB() ? tambahHari(hariIniWIB(), 30) : akhirPeriode(), alasan: '' })}>+ Beri izin</button>}</div>
+        {form && (
+          <form className="form" onSubmit={simpanIzin} style={{ padding: '0 16px 16px' }}>
+            <div className="fld"><label htmlFor="ek-k">Karyawan</label>
+              <select className="input" id="ek-k" required value={form.karyawanId} onChange={(e) => setForm({ ...form, karyawanId: e.target.value })} disabled={form.ubah}>
+                <option value="">Pilih karyawan…</option>
+                {karyawan.map((k) => <option key={k.id} value={k.id}>{k.nama} · {k.nik} · {k.departemen}{sudahIzin.has(k.id) ? ' (sudah ada izin)' : ''}</option>)}
+              </select></div>
+            <div className="fld"><label htmlFor="ek-s">Berlaku sampai</label><input className="input" type="date" id="ek-s" required min={hariIniWIB()} max={tambahHari(hariIniWIB(), 365)} value={form.sampai} onChange={(e) => setForm({ ...form, sampai: e.target.value })} /></div>
+            <div className="fld full"><label htmlFor="ek-a">Alasan (dilihat karyawan)</label><input className="input" id="ek-a" required minLength={3} maxLength={200} placeholder="Contoh: lembur shift malam tanpa leader" value={form.alasan} onChange={(e) => setForm({ ...form, alasan: e.target.value })} /></div>
+            <div className="full"><button type="submit" className="btn">Simpan izin</button><button type="button" className="btn key" onClick={() => setForm(null)}>Batal</button></div>
+          </form>
+        )}
+        {!d.izin.length ? <div className="empty">Belum ada karyawan dengan izin tap eksklusif.</div> : (
+          <div className="scroll"><table>
+            <thead><tr><th>Karyawan</th><th>Berlaku sampai</th><th>Alasan</th><th>Aksi</th></tr></thead>
+            <tbody>{d.izin.map((i) => (
+              <tr key={i.karyawan.id}>
+                <td><span className="namecell"><Avatar nama={i.karyawan.nama} kunci={i.karyawan.id} kecil /><span>{i.karyawan.nama}<div className="muted" style={{ fontSize: 12 }}>{i.karyawan.nik} · {i.karyawan.departemen}</div></span></span></td>
+                <td>{i.berlaku ? tanggalPendek(i.sampai.slice(0, 10)) : <span className="badge b-mute">Berakhir {tanggalPendek(i.sampai.slice(0, 10))}</span>}</td>
+                <td style={{ maxWidth: 280 }}>{i.alasan}</td>
+                <td><div className="rowacts">
+                  <button type="button" className="link" onClick={() => setForm({ ubah: true, karyawanId: String(i.karyawan.id), sampai: i.berlaku ? i.sampai.slice(0, 10) : akhirPeriode(), alasan: i.alasan || '' })}>{i.berlaku ? 'Ubah' : 'Perpanjang'}</button>
+                  <button type="button" className="link danger" onClick={() => setCabut(i)}>Cabut</button>
+                </div></td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        )}
+      </div>
+
+      <div className="glass form" style={{ gap: 12 }}>
+        <h2>Titik lokasi pabrik</h2>
+        <p className="hint" style={{ gridColumn: '1 / -1', margin: 0 }}>Jarak HP karyawan dihitung dari titik ini. Kosongkan kalau cukup mencatat koordinat saja.</p>
+        <div className="fld"><label htmlFor="lp-n">Nama</label><input className="input" id="lp-n" value={lok.nama} onChange={(e) => setLok({ ...lok, nama: e.target.value })} /></div>
+        <div className="fld"><label htmlFor="lp-r">Radius wajar (meter)</label><input className="input num" type="number" id="lp-r" min={50} max={20000} value={lok.radiusM} onChange={(e) => setLok({ ...lok, radiusM: e.target.value })} /></div>
+        <div className="fld"><label htmlFor="lp-lat">Garis lintang (lat)</label><input className="input num" id="lp-lat" inputMode="decimal" placeholder="-6.30050" value={lok.lat} onChange={(e) => setLok({ ...lok, lat: e.target.value.replace(',', '.') })} /></div>
+        <div className="fld"><label htmlFor="lp-lng">Garis bujur (lng)</label><input className="input num" id="lp-lng" inputMode="decimal" placeholder="107.15200" value={lok.lng} onChange={(e) => setLok({ ...lok, lng: e.target.value.replace(',', '.') })} /></div>
+        <div className="full">
+          <button type="button" className="btn" onClick={() => simpanLokasi(false)}>Simpan titik</button>
+          <button type="button" className="btn key" onClick={pakaiHpIni}>Pakai lokasi HP ini</button>
+          {d.lokasiPabrik && <button type="button" className="link danger" onClick={() => simpanLokasi(true)}>Hapus titik</button>}
+          {d.lokasiPabrik && <a className="link" href={peta(d.lokasiPabrik)} target="_blank" rel="noreferrer">Lihat di peta</a>}
+        </div>
+      </div>
+
+      <div className="glass tablebox">
+        <div className="tb-head"><b>Tap eksklusif terakhir</b><span className="muted" style={{ fontSize: 13 }}>{d.tap.filter((t) => t.lokasi?.jauh).length} di luar area</span></div>
+        {!d.tap.length ? <div className="empty">Belum ada tap eksklusif.</div> : (
+          <div className="scroll"><table>
+            <thead><tr><th>Tanggal</th><th>Karyawan</th><th>Jam tap</th><th>Hari</th><th className="n">Jam hitung</th><th>Lokasi HP</th></tr></thead>
+            <tbody>{d.tap.map((t) => (
+              <tr key={t.id} className={t.lokasi?.jauh ? 'warn' : ''}>
+                <td>{tanggalPendek(t.tanggal)}</td>
+                <td>{t.karyawan.nama}<div className="muted" style={{ fontSize: 12 }}>{t.karyawan.nik}</div></td>
+                <td className="num">{t.jam}</td>
+                <td><span className={`badge ${t.jenisHari === 'KERJA' ? 'b-ok' : 'b-warn'}`}>{t.jenisHari === 'KERJA' ? 'Hari kerja' : 'Libur'}</span></td>
+                <td className="n">{jamFmt(t.jamHitung)}<div className="muted" style={{ fontSize: 12 }}>{rp(t.nominal)}</div></td>
+                <td><Lokasi l={t.lokasi} /></td>
+              </tr>
+            ))}</tbody>
+          </table></div>
+        )}
+      </div>
+
+      {cabut && (
+        <Konfirmasi judul={`Cabut izin ${cabut.karyawan.nama}?`} isi="Karyawan kembali wajib memindai QR dari HP petugas. Tap eksklusif yang sudah tercatat tetap ada di rekap." labelOk="Cabut izin" bahaya
+          onBatal={() => setCabut(null)}
+          onOk={async () => { const i = cabut; setCabut(null); try { await api(`/api/mandiri/eksklusif/${i.karyawan.id}`, { method: 'DELETE' }); toast('Izin dicabut'); muat(); } catch (e) { toast(e.message, true); } }} />
+      )}
+    </>
+  );
+}
+
 export default function LemburMandiri() {
   const [tab, setTab] = useState('wajah');
   return (
@@ -217,12 +356,12 @@ export default function LemburMandiri() {
       <div className="ph">
         <div><h1>Tap mandiri</h1><p>Karyawan tap in / tap out sendiri dari portal: verifikasi wajah + QR dinamis petugas. Lembur dihitung jam aktual sesuai PP 35/2021.</p></div>
       </div>
-      <div className="seg" role="tablist" aria-label="Bagian" style={{ gridTemplateColumns: 'repeat(3,minmax(0,1fr))', maxWidth: 560 }}>
-        {[['wajah', 'Persetujuan wajah'], ['sesi', 'Sedang lembur'], ['aturan', 'Aturan hitung']].map(([k, l]) => (
+      <div className="seg" role="tablist" aria-label="Bagian" style={{ gridTemplateColumns: 'repeat(4,minmax(0,1fr))', maxWidth: 720 }}>
+        {[['wajah', 'Persetujuan wajah'], ['sesi', 'Sedang lembur'], ['eksklusif', 'Tap eksklusif'], ['aturan', 'Aturan hitung']].map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
-      {tab === 'wajah' ? <Wajah /> : tab === 'sesi' ? <Sesi /> : <Aturan />}
+      {tab === 'wajah' ? <Wajah /> : tab === 'sesi' ? <Sesi /> : tab === 'eksklusif' ? <Eksklusif /> : <Aturan />}
     </>
   );
 }

@@ -8,6 +8,7 @@ import { jamFmt, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
 import { hitungLemburAktual } from '../../lib/hitungAktual.js';
 import { useKamera } from '../petugas/useKamera.js';
 import { tanganiError } from './bersama.js';
+import { ambilLokasi, teksLokasi } from '../../lib/lokasi.js';
 
 const durasi = (menit) => `${Math.floor(menit / 60)} jam ${menit % 60} menit`;
 const jamSekarangWIB = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -24,12 +25,13 @@ export function RincianTarif({ rincian, upahSejam }) {
   );
 }
 
-function PindaiQr({ onTerbaca, onBatal }) {
+function PindaiQr({ onTerbaca, onBatal, kartu = false }) {
   const toast = useToast();
   const sudah = useRef(false);
   const kamera = useKamera('qr-region', (teks) => {
     if (sudah.current) return;
-    if (!teks.startsWith('LQM1.')) { toast('Ini bukan QR lembur dari HP petugas.', true); return; }
+    if (kartu && teks.startsWith('LQM1.')) { toast('Ini QR dari HP petugas. Untuk tap eksklusif, scan QR di ID card Anda sendiri.', true); return; }
+    if (!kartu && !teks.startsWith('LQM1.')) { toast('Ini bukan QR lembur dari HP petugas.', true); return; }
     sudah.current = true;
     kamera.tahan();
     onTerbaca(teks);
@@ -46,7 +48,7 @@ function PindaiQr({ onTerbaca, onBatal }) {
           </div>
         )}
       </div>
-      <p className="hint">Arahkan kamera ke QR di layar HP petugas. QR berganti tiap 10 detik, jadi pindai langsung dari layarnya.</p>
+      <p className="hint">{kartu ? 'Arahkan kamera ke QR di ID card Anda. Kamera belakang bisa dipakai bergantian dengan meletakkan kartu di meja.' : 'Arahkan kamera ke QR di layar HP petugas. QR berganti tiap 10 detik, jadi pindai langsung dari layarnya.'}</p>
       <div className="acts"><button type="button" className="btn key" onClick={onBatal}>Batal</button></div>
     </>
   );
@@ -78,14 +80,25 @@ function Persetujuan({ onLanjut, onBatal }) {
 
 function Hasil({ r, upahSejam, onTutup }) {
   const masuk = r.status === 'TAP_IN';
+  const eksklusif = r.status === 'OK'; // tap eksklusif: sekali scan
   const nol = r.status === 'TIDAK_DIHITUNG';
   const l = r.lembur;
   return (
     <div className="glass panel tap-hasil">
       <div className={`orb ${nol ? 'no' : 'ok'}`}><span className="ball"><Icon name={nol ? 'alert' : 'check'} /></span></div>
-      <h2 style={{ textAlign: 'center' }}>{masuk ? 'Tap in tercatat' : nol ? 'Tidak ada jam lembur' : 'Lembur tercatat'}</h2>
+      <h2 style={{ textAlign: 'center' }}>{masuk ? 'Tap in tercatat' : nol ? 'Tidak ada jam lembur' : eksklusif ? 'Tap eksklusif tercatat' : 'Lembur tercatat'}</h2>
       <p style={{ textAlign: 'center', margin: 0 }}>{r.pesan}</p>
-      {l && (
+
+      {l && eksklusif && (
+        <div className="glass kv">
+          <div><span>Tanggal</span><b>{tanggalPendek(l.tanggal)} · {l.jenisHari === 'KERJA' ? 'Hari kerja' : 'Hari libur'}</b></div>
+          <div><span>Jam tap</span><b className="num">{l.jamTap} WIB</b></div>
+          <div><span>Jam hitung</span><b className="num">{jamFmt(l.jamHitung)} jam</b></div>
+          <div><span>Upah lembur</span><b className="num">{rp(l.nominal)}</b></div>
+          <div><span>Lokasi HP</span><b>{teksLokasi(r.lokasi)}</b></div>
+        </div>
+      )}
+      {l && !eksklusif && (
         <>
           <div className="glass kv">
             <div><span>Tanggal</span><b>{tanggalPendek(l.tanggal)} · {l.jenisHari === 'KERJA' ? 'Hari kerja' : 'Hari libur'}</b></div>
@@ -97,6 +110,7 @@ function Hasil({ r, upahSejam, onTutup }) {
             <div><span>Upah lembur</span><b className="num">{rp(l.nominal)}</b></div>
           </div>
           <RincianTarif rincian={l.rincian} upahSejam={upahSejam} />
+
           {l.peringatan?.filter((p) => !/jam pulang/.test(p)).map((p) => <p key={p} className="hint">⚠ {p}</p>)}
         </>
       )}
@@ -111,6 +125,8 @@ export default function Tap() {
   const [d, setD] = useState(null);
   const [langkah, setLangkah] = useState('status'); // status | setuju | daftar | wajah | qr | kirim | hasil
   const [vektor, setVektor] = useState(null);
+  const [cara, setCara] = useState('QR'); // QR = pindai QR petugas, EKSKLUSIF = scan ID card sendiri
+  const lokasi = useRef(null);
   const [hasil, setHasil] = useState(null);
   const [tanya, setTanya] = useState(null);
   const [, setDetik] = useState(0);
@@ -120,10 +136,19 @@ export default function Tap() {
   // Penghitung waktu lembur yang berjalan
   useEffect(() => { const t = setInterval(() => setDetik((n) => n + 1), 30_000); return () => clearInterval(t); }, []);
 
-  const kirimTap = async (qr) => {
+  const mulaiTap = (c) => {
+    setCara(c);
+    // Lokasi diminta sejak awal supaya sudah siap saat kartu selesai dipindai
+    lokasi.current = c === 'EKSKLUSIF' ? ambilLokasi() : null;
+    setLangkah('wajah');
+  };
+
+  const kirimTap = async (isi) => {
     setLangkah('kirim');
     try {
-      const r = await api('/api/portal/tap', { method: 'POST', body: { qr, vektor, hidup: true } });
+      const r = cara === 'EKSKLUSIF'
+        ? await api('/api/portal/tap-eksklusif', { method: 'POST', body: { kartu: isi, vektor, hidup: true, lokasi: await lokasi.current } })
+        : await api('/api/portal/tap', { method: 'POST', body: { qr: isi, vektor, hidup: true } });
       setHasil(r);
       setLangkah('hasil');
       muat();
@@ -131,8 +156,9 @@ export default function Tap() {
       const kode = e.data?.kode;
       toast(e.message, true);
       // QR kedaluwarsa/beda area → pindai ulang; wajah tidak cocok → ulang wajah
-      setLangkah(kode?.startsWith('QR_') ? 'qr' : kode === 'WAJAH_TIDAK_COCOK' ? 'wajah' : 'status');
-      if (!kode?.startsWith('QR_')) muat();
+      const ulangPindai = kode?.startsWith('QR_') || kode === 'KARTU_BUKAN_MILIK' || kode === 'KARTU_LAMA';
+      setLangkah(ulangPindai ? 'qr' : kode === 'WAJAH_TIDAK_COCOK' ? 'wajah' : 'status');
+      if (!ulangPindai) muat();
     }
   };
 
@@ -177,15 +203,15 @@ export default function Tap() {
 
       {langkah === 'wajah' && (
         <>
-          <div className="glass today"><Tile icon="user" warna="t-indigo" size={40} /><div className="t"><b>Langkah 1 dari 2 · Verifikasi wajah</b><span>{sesi ? 'Untuk tap out' : 'Untuk tap in'}</span></div></div>
+          <div className="glass today"><Tile icon="user" warna="t-indigo" size={40} /><div className="t"><b>Langkah 1 dari 2 · Verifikasi wajah</b><span>{cara === 'EKSKLUSIF' ? 'Untuk tap eksklusif' : sesi ? 'Untuk tap out' : 'Untuk tap in'}</span></div></div>
           <KameraWajah mode="tap" onBatal={() => setLangkah('status')} onHasil={({ vektor: v }) => { setVektor(v); setLangkah('qr'); }} />
         </>
       )}
 
       {langkah === 'qr' && (
         <>
-          <div className="glass today"><Tile icon="qr" warna="t-teal" size={40} /><div className="t"><b>Langkah 2 dari 2 · Pindai QR petugas</b><span>Wajah terverifikasi ✓</span></div></div>
-          <PindaiQr onBatal={() => setLangkah('status')} onTerbaca={kirimTap} />
+          <div className="glass today"><Tile icon={cara === 'EKSKLUSIF' ? 'card' : 'qr'} warna="t-teal" size={40} /><div className="t"><b>Langkah 2 dari 2 · {cara === 'EKSKLUSIF' ? 'Scan ID card Anda' : 'Pindai QR petugas'}</b><span>Wajah terverifikasi ✓{cara === 'EKSKLUSIF' ? ' · lokasi HP ikut dicatat' : ''}</span></div></div>
+          <PindaiQr key={cara} kartu={cara === 'EKSKLUSIF'} onBatal={() => setLangkah('status')} onTerbaca={kirimTap} />
         </>
       )}
 
@@ -228,9 +254,21 @@ export default function Tap() {
           )}
 
           {d.wajah === 'DISETUJUI' && !(lemburHariIni && !sesi) && (
-            <button type="button" className={`btn lg${sesi ? ' danger' : ''}`} onClick={() => setLangkah('wajah')}>
-              <Icon name="scan" size={20} />{sesi ? 'Tap out — selesai lembur' : 'Tap in — mulai lembur'}
+            <button type="button" className={`btn lg${sesi ? ' danger' : ''}`} onClick={() => mulaiTap('QR')}>
+              <Icon name="scan" size={20} />{sesi ? 'Tap out — selesai lembur' : 'Tap in — mulai lembur'}{d.eksklusif ? ' (QR petugas)' : ''}
             </button>
+          )}
+          {d.eksklusif && d.wajah === 'DISETUJUI' && !lemburHariIni && !sesi && (
+            <div className="glass panel eksklusif">
+              <div className="today" style={{ padding: 0, background: 'none', boxShadow: 'none', border: 0 }}>
+                <Tile icon="card" warna="t-amber" size={40} />
+                <div className="t"><b>Izin tap eksklusif</b><span>Berlaku sampai {tanggalPendek(d.eksklusif.sampai.slice(0, 10))} · {d.eksklusif.alasan}</span></div>
+              </div>
+              <button type="button" className="btn key lg" onClick={() => mulaiTap('EKSKLUSIF')}>
+                <Icon name="card" size={20} />Tap lembur dengan ID card sendiri
+              </button>
+              <p className="hint" style={{ margin: 0 }}>Untuk saat petugas tidak ada. Cukup sekali scan, dihitung seperti scan petugas: hari kerja {jamFmt(5.5)} jam, hari libur 14 jam hitung. Wajah + ID card diverifikasi, lokasi HP dicatat untuk HRD.</p>
+            </div>
           )}
           {sesi && <button type="button" className="link" style={{ alignSelf: 'center' }} onClick={() => setTanya('batal')}>Batalkan tap in (salah tap)</button>}
 

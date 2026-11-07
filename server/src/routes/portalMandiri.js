@@ -2,17 +2,20 @@
 //   1. verifikasi wajah (vektor dibanding wajah acuan yang disetujui admin)
 //   2. pindai QR dinamis dari HP petugas
 //   3. tap pertama = tap in (mulai lembur), tap kedua = tap out → lembur dihitung jam aktual (PP 35/2021)
+// Tap eksklusif (karyawan dengan izin admin): wajah + scan ID card sendiri, SEKALI scan, dihitung seperti
+// scan petugas (5,5 / 14 jam hitung). Lokasi HP dicatat sebagai pengganti saksi petugas.
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ah, HttpError, ringkasKaryawan } from '../lib/util.js';
-import { dariTanggalDb, hitungLemburAktual, jamWIB, jenisHari, keTanggalDb, waktuSekarang } from '../lib/lembur.js';
+import { dariTanggalDb, hitungLembur, hitungLemburAktual, jamWIB, jenisHari, keTanggalDb, waktuSekarang } from '../lib/lembur.js';
 import { liburPada, tapPada } from '../lib/tapManual.js';
 import { ambilAturan, jejakAturan } from '../lib/aturanLembur.js';
 import { periksaQrMandiri } from '../lib/qrMandiri.js';
 import { AMBANG_WAJAH, bacaFotoWajah, bacaVektor, jarakWajah } from '../lib/wajah.js';
 import { kabariTapTercatat } from '../lib/notifikasi.js';
+import { ambilLokasiPabrik, catatLokasi, skemaLokasiHp } from '../lib/lokasi.js';
 
 const router = Router();
 const MAKS_JAM_SESI = 20; // tap in lebih lama dari ini dianggap lupa tap out
@@ -27,6 +30,12 @@ const batasTap = rateLimit({
   legacyHeaders: false,
   message: { pesan: 'Terlalu banyak percobaan tap. Tunggu 5 menit.' },
 });
+
+/** Izin tap eksklusif yang masih berlaku, atau null. */
+export function izinEksklusif(k, waktu = new Date()) {
+  if (!k.eksklusifSampai || new Date(k.eksklusifSampai) < waktu) return null;
+  return { sampai: k.eksklusifSampai, alasan: k.eksklusifAlasan };
+}
 
 function bentukSesi(s, waktu = new Date()) {
   if (!s) return null;
@@ -43,6 +52,7 @@ export function bentukLemburAktual(t) {
     jamMulai: t.mulai ? jamWIB(t.mulai) : null, jamSelesai: t.selesai ? jamWIB(t.selesai) : null,
     menitLembur: t.menitLembur, jenisHari: t.jenisHari, jamHitung: t.jamHitung, upahSejam: t.upahSejam,
     nominal: t.nominal, rincian: t.rincianHitung?.rincian || null, peringatan: t.rincianHitung?.peringatan || [],
+    lokasi: t.rincianHitung?.lokasi || null,
   };
 }
 
@@ -95,6 +105,7 @@ router.get('/tap', ah(async (req, res) => {
     sesi: sesi ? { ...bentukSesi(sesi, waktu), libur: liburSesi.get(dariTanggalDb(sesi.tanggal)) ?? null } : null,
     hariIni: { tanggal, label: hari.label, keterangan: hari.keterangan, jenis: hari.jenis, lembur: hariIni ? bentukLemburAktual(hariIni) : null },
     aturan,
+    eksklusif: izinEksklusif(k, new Date()),
     upahSejam: Math.round(k.upahBulanan / 173),
     waktuServer: waktu,
   });
@@ -108,41 +119,35 @@ const skemaTap = z.object({
   simulasi: z.string().optional(),
 });
 
-router.post('/tap', batasTap, ah(async (req, res) => {
-  const k = req.karyawan;
-  const d = skemaTap.parse(req.body);
-  const { tanggal, waktu } = waktuSekarang(d.simulasi);
-
-  // 1. Wajah
+/** Cocokkan wajah dengan wajah acuan yang disetujui. Mengembalikan jarak (tidak dikirim ke HP). */
+async function periksaWajah(k, vektor) {
   const acuan = await prisma.wajahKaryawan.findUnique({ where: { karyawanId: k.id } });
   if (!acuan || acuan.status !== 'DISETUJUI') {
     throw new HttpError(403, acuan?.status === 'MENUNGGU' ? 'Wajah Anda masih menunggu persetujuan HRD.' : 'Daftarkan wajah Anda dulu di menu Tap.', { kode: 'WAJAH_BELUM' });
   }
-  const jarak = jarakWajah(bacaVektor(d.vektor), acuan.vektor);
+  const jarak = jarakWajah(bacaVektor(vektor), acuan.vektor);
   if (jarak > AMBANG_WAJAH) {
     throw new HttpError(403, 'Wajah tidak cocok dengan wajah terdaftar. Cari tempat terang, lepas masker/kacamata gelap, lalu ulangi.', { kode: 'WAJAH_TIDAK_COCOK' });
   }
+  return jarak;
+}
 
-  // 2. QR petugas
-  const qr = periksaQrMandiri(d.qr);
-  if (!qr.ok) throw new HttpError(400, qr.pesan, { kode: qr.kode });
-  const petugas = await prisma.user.findUnique({ where: { id: qr.userId } });
-  if (!petugas || !petugas.aktif) throw new HttpError(400, 'QR berasal dari akun petugas yang tidak aktif.', { kode: 'QR_PETUGAS_NONAKTIF' });
-  if (petugas.role !== 'ADMIN' && petugas.area !== 'Semua' && petugas.area !== k.departemen) {
-    throw new HttpError(403, `QR ini milik petugas area ${petugas.area}. Pindai QR petugas area ${k.departemen}.`, { kode: 'QR_BEDA_AREA' });
-  }
-
-  // 3. Tap in atau tap out
+/**
+ * Tap in (belum ada sesi) atau tap out (ada sesi) setelah identitas terverifikasi.
+ * @param {{k, tanggal, waktu, jarak, petugasId}} o
+ */
+async function prosesTap(res, { k, tanggal, waktu, jarak, petugasId }) {
   const sesi = await prisma.sesiLembur.findUnique({ where: { karyawanId: k.id } });
   if (!sesi) {
     const ada = await tapPada(prisma, k.id, tanggal);
     if (ada) throw new HttpError(409, 'Lembur hari ini sudah tercatat. Satu karyawan satu lembur per hari.', { kode: 'SUDAH_TAP' });
     const baru = await prisma.sesiLembur.create({
-      data: { karyawanId: k.id, tanggal: keTanggalDb(tanggal), mulai: waktu, petugasId: petugas.id, jarakWajah: jarak },
+      data: { karyawanId: k.id, tanggal: keTanggalDb(tanggal), mulai: waktu, petugasId, jarakWajah: jarak },
+      include: { petugas: { select: { nama: true, area: true } } },
     });
     return res.status(201).json({
       status: 'TAP_IN', pesan: `Tap in ${jamWIB(waktu)} WIB. Selamat bekerja — jangan lupa tap out saat selesai.`,
-      sesi: bentukSesi({ ...baru, petugas }, waktu), karyawan: ringkasKaryawan(k),
+      sesi: bentukSesi(baru, waktu), karyawan: ringkasKaryawan(k),
     });
   }
 
@@ -176,7 +181,7 @@ router.post('/tap', batasTap, ah(async (req, res) => {
       const t = await tx.lembur.create({
         data: {
           karyawanId: k.id, tanggal: keTanggalDb(tglLembur), waktuTap: waktu, jenisHari: h.jenisHari,
-          jamHitung: h.jamHitung, upahSejam: h.upahSejam, nominal: h.nominal, petugasId: petugas.id,
+          jamHitung: h.jamHitung, upahSejam: h.upahSejam, nominal: h.nominal, petugasId,
           metode: 'AKTUAL', sumber: 'MANDIRI', mulai: sesi.mulai, selesai: waktu, menitLembur: h.menitLembur, jarakWajah: jarak,
           rincianHitung: {
             rincian: h.rincian, mulaiDihitung: h.mulaiDihitung, menitKotor: h.menitKotor, menitIstirahat: h.menitIstirahat,
@@ -196,6 +201,91 @@ router.post('/tap', batasTap, ah(async (req, res) => {
     status: 'TAP_OUT',
     pesan: `Tap out ${jamWIB(waktu)} WIB. Lembur ${Math.floor(h.menitLembur / 60)} jam ${h.menitLembur % 60} menit tercatat.`,
     lembur: bentukLemburAktual(tap), hitung: h, karyawan: ringkasKaryawan(k),
+  });
+}
+
+router.post('/tap', batasTap, ah(async (req, res) => {
+  const k = req.karyawan;
+  const d = skemaTap.parse(req.body);
+  const { tanggal, waktu } = waktuSekarang(d.simulasi);
+
+  // 1. Wajah
+  const jarak = await periksaWajah(k, d.vektor);
+
+  // 2. QR petugas
+  const qr = periksaQrMandiri(d.qr);
+  if (!qr.ok) throw new HttpError(400, qr.pesan, { kode: qr.kode });
+  const petugas = await prisma.user.findUnique({ where: { id: qr.userId } });
+  if (!petugas || !petugas.aktif) throw new HttpError(400, 'QR berasal dari akun petugas yang tidak aktif.', { kode: 'QR_PETUGAS_NONAKTIF' });
+  if (petugas.role !== 'ADMIN' && petugas.area !== 'Semua' && petugas.area !== k.departemen) {
+    throw new HttpError(403, `QR ini milik petugas area ${petugas.area}. Pindai QR petugas area ${k.departemen}.`, { kode: 'QR_BEDA_AREA' });
+  }
+
+  // 3. Tap in atau tap out
+  return prosesTap(res, { k, tanggal, waktu, jarak, petugasId: petugas.id });
+}));
+
+// ---------- tap eksklusif: scan ID card sendiri ----------
+
+const skemaEksklusif = z.object({
+  kartu: z.string().trim().min(1).max(200),
+  vektor: z.array(z.number()),
+  hidup: z.literal(true, { errorMap: () => ({ message: 'Verifikasi wajah belum selesai. Ikuti petunjuk menoleh.' }) }),
+  lokasi: skemaLokasiHp,
+  simulasi: z.string().optional(),
+});
+
+router.post('/tap-eksklusif', batasTap, ah(async (req, res) => {
+  const k = req.karyawan;
+  const d = skemaEksklusif.parse(req.body);
+  const { tanggal, waktu } = waktuSekarang(d.simulasi);
+
+  // 0. Izin dari admin
+  if (!izinEksklusif(k, new Date())) {
+    throw new HttpError(403, k.eksklusifSampai
+      ? 'Izin tap eksklusif Anda sudah berakhir. Pakai QR petugas, atau minta HRD memperpanjang izin.'
+      : 'Anda tidak punya izin tap eksklusif. Pakai QR dari HP petugas.', { kode: 'TANPA_IZIN_EKSKLUSIF' });
+  }
+  // 1. Wajah
+  const jarak = await periksaWajah(k, d.vektor);
+  // 2. ID card harus milik akun yang login
+  if (d.kartu !== k.qrToken) {
+    const lama = await prisma.qrTokenLama.findUnique({ where: { token: d.kartu } });
+    if (lama?.karyawanId === k.id) throw new HttpError(410, 'Kartu ini sudah diganti. Scan ID card terbaru Anda.', { kode: 'KARTU_LAMA' });
+    throw new HttpError(403, 'Ini bukan ID card Anda. Tap eksklusif hanya bisa dengan kartu milik sendiri.', { kode: 'KARTU_BUKAN_MILIK' });
+  }
+  // 3. Satu karyawan satu lembur per hari; tap in mandiri yang masih berjalan harus ditutup dulu
+  if (await prisma.sesiLembur.findUnique({ where: { karyawanId: k.id } })) {
+    throw new HttpError(409, 'Anda sedang tap in mandiri (QR petugas). Tap out atau batalkan dulu tap in itu.', { kode: 'ADA_TAP_IN' });
+  }
+  // 4. Penanggung jawab = admin pemberi izin; lokasi dicatat (tidak memblokir)
+  let petugasId = k.eksklusifOlehId;
+  if (!petugasId || !(await prisma.user.findUnique({ where: { id: petugasId } }))) {
+    petugasId = (await prisma.user.findFirst({ where: { role: 'ADMIN', aktif: true }, orderBy: { id: 'asc' } }))?.id;
+  }
+  if (!petugasId) throw new HttpError(500, 'Belum ada admin aktif.');
+  const lokasi = catatLokasi(d.lokasi, await ambilLokasiPabrik(), waktu);
+
+  // 5. Sekali scan, dihitung seperti scan petugas (hari kerja / hari libur, jam hitung tetap)
+  const h = hitungLembur({ upahBulanan: k.upahBulanan, tanggal, libur: await liburPada(prisma, tanggal), aturan: await ambilAturan() });
+  let tap;
+  try {
+    tap = await prisma.lembur.create({
+      data: {
+        karyawanId: k.id, tanggal: keTanggalDb(tanggal), waktuTap: waktu, jenisHari: h.jenisHari,
+        jamHitung: h.jamHitung, upahSejam: h.upahSejam, nominal: h.nominal, petugasId,
+        sumber: 'EKSKLUSIF', jarakWajah: jarak, rincianHitung: { lokasi },
+      },
+    });
+  } catch (e) {
+    if (e.code === 'P2002') throw new HttpError(409, 'Lembur hari ini sudah tercatat. Satu karyawan satu lembur per hari.', { kode: 'SUDAH_TAP' });
+    throw e;
+  }
+  kabariTapTercatat(k, tap);
+  res.status(201).json({
+    status: 'OK',
+    pesan: `Tap ${jamWIB(waktu)} WIB tercatat · ${h.label}${h.keterangan ? ` (${h.keterangan})` : ''}.`,
+    lembur: { ...bentukLemburAktual(tap), jamTap: jamWIB(waktu) }, karyawan: ringkasKaryawan(k), lokasi,
   });
 }));
 

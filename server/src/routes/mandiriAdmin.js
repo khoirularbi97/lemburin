@@ -6,6 +6,7 @@ import { ah, HttpError, ringkasKaryawan } from '../lib/util.js';
 import { dariTanggalDb, jamWIB } from '../lib/lembur.js';
 import { ambilAturan, simpanAturan } from '../lib/aturanLembur.js';
 import { ATURAN_AKTUAL_BAWAAN } from '../lib/lembur.js';
+import { ambilLokasiPabrik, simpanLokasiPabrik } from '../lib/lokasi.js';
 
 const router = Router();
 
@@ -78,6 +79,57 @@ router.delete('/sesi/:id', ah(async (req, res) => {
   const r = await prisma.sesiLembur.deleteMany({ where: { id: Number(req.params.id) } });
   if (!r.count) throw new HttpError(404, 'Tap in tidak ditemukan.');
   res.status(204).end();
+}));
+
+// ---------- tap eksklusif: izin per karyawan + titik lokasi pabrik ----------
+router.get('/eksklusif', ah(async (req, res) => {
+  const kini = new Date();
+  const [izin, lokasi, tap] = await Promise.all([
+    prisma.karyawan.findMany({ where: { eksklusifSampai: { not: null } }, orderBy: { nama: 'asc' } }),
+    ambilLokasiPabrik(),
+    prisma.lembur.findMany({ where: { sumber: 'EKSKLUSIF' }, include: { karyawan: true }, orderBy: { waktuTap: 'desc' }, take: 100 }),
+  ]);
+  res.json({
+    lokasiPabrik: lokasi,
+    izin: izin.map((k) => ({
+      karyawan: ringkasKaryawan(k), sampai: k.eksklusifSampai, alasan: k.eksklusifAlasan,
+      berlaku: new Date(k.eksklusifSampai) >= kini, aktif: k.aktif,
+    })),
+    tap: tap.map((t) => ({
+      id: t.id, tanggal: dariTanggalDb(t.tanggal), karyawan: ringkasKaryawan(t.karyawan), jam: jamWIB(t.waktuTap),
+      jenisHari: t.jenisHari, jamHitung: t.jamHitung, nominal: t.nominal, lokasi: t.rincianHitung?.lokasi || null,
+    })),
+  });
+}));
+
+const skemaIzin = z.object({
+  sampai: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal YYYY-MM-DD'),
+  alasan: z.string().trim().min(3, 'Tulis alasan pemberian izin.').max(200),
+});
+
+// Beri / perpanjang izin. Berlaku sampai akhir hari `sampai` (WIB).
+router.put('/eksklusif/:karyawanId', ah(async (req, res) => {
+  const d = skemaIzin.parse(req.body);
+  const sampai = new Date(`${d.sampai}T23:59:59.999+07:00`);
+  if (Number.isNaN(sampai.getTime()) || sampai < new Date()) throw new HttpError(400, 'Tanggal berlaku harus hari ini atau setelahnya.');
+  const maks = new Date(Date.now() + 366 * 86400000);
+  if (sampai > maks) throw new HttpError(400, 'Izin paling lama 1 tahun. Perpanjang lagi nanti.');
+  const k = await prisma.karyawan.findUnique({ where: { id: Number(req.params.karyawanId) } });
+  if (!k) throw new HttpError(404, 'Karyawan tidak ditemukan.');
+  const u = await prisma.karyawan.update({ where: { id: k.id }, data: { eksklusifSampai: sampai, eksklusifAlasan: d.alasan, eksklusifOlehId: req.user.id } });
+  res.json({ karyawan: ringkasKaryawan(u), sampai: u.eksklusifSampai, alasan: u.eksklusifAlasan });
+}));
+
+router.delete('/eksklusif/:karyawanId', ah(async (req, res) => {
+  const id = Number(req.params.karyawanId);
+  const k = await prisma.karyawan.findUnique({ where: { id } });
+  if (!k) throw new HttpError(404, 'Karyawan tidak ditemukan.');
+  await prisma.karyawan.update({ where: { id }, data: { eksklusifSampai: null, eksklusifAlasan: null, eksklusifOlehId: null } });
+  res.status(204).end();
+}));
+
+router.put('/lokasi-pabrik', ah(async (req, res) => {
+  res.json({ lokasiPabrik: await simpanLokasiPabrik(req.body?.lokasiPabrik ?? null) });
 }));
 
 export default router;

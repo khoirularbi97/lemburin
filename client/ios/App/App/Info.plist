@@ -8,6 +8,8 @@
 	<string>en</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Kamera dipakai untuk scan QR lembur dan verifikasi wajah saat tap lembur mandiri.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Lokasi dicatat saat tap lembur eksklusif dengan ID card sendiri, untuk diperiksa HRD.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Foto dipakai untuk membaca QR ID card kalau kamera bermasalah.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
