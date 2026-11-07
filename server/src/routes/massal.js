@@ -29,7 +29,7 @@ router.get('/batas', ah(async (req, res) => {
     ...batasManual(),
     masaSimpanFotoBulan: MASA_SIMPAN_BULAN,
     // Urutan: Groq → Gemini → Azure → pembaca lokal di HP
-    pembaca: groqAktif ? { jenis: 'GROQ', model: modelGroq, ...(await pemakaianGroq()) }
+    pembaca: groqAktif ? { jenis: 'GROQ', model: modelGroq(), ...(await pemakaianGroq()) }
       : geminiAktif ? { jenis: 'GEMINI', model: modelGemini, ...(await pemakaianGemini()) }
       : azureAktif ? { jenis: 'AZURE', periode: 'bulan', ...(await pemakaian()) } : { jenis: 'LOKAL' },
   });

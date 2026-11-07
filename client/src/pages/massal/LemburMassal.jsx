@@ -19,14 +19,14 @@ function kemarin(min) {
 
 const NAMA_PEMBACA = { GROQ: 'Groq', GEMINI: 'Gemini', AZURE: 'Azure' };
 
-/** Baca SPL lewat Gemini/Azure: potong kolom → kirim → petakan baris. null = pakai pembaca lokal. */
+/** Baca SPL lewat Groq/Gemini/Azure: potong kolom → kirim → petakan baris. { gagal } = pakai pembaca lokal. */
 async function bacaLewatAwan(file, karyawan, setProgres, toast, jenis) {
   setProgres({ persen: 10, tahap: 'Mencari tabel SPL…' });
   const { siapkanSpl } = await import('../../lib/potongSpl.js');
   const spl = await siapkanSpl(file);
   if (spl.gagal) {
     toast('Tabel SPL tidak terdeteksi. Foto ulang lebih lurus & seluruh tabel terlihat. Dipakai pembaca lokal dulu.', true);
-    return null;
+    return { gagal: 'garis tabel SPL tidak terdeteksi di foto (foto miring, terpotong, atau kurang terang)' };
   }
   setProgres({ persen: 45, tahap: `Membaca tulisan tangan (${NAMA_PEMBACA[jenis]})…` });
   const jumlahBaris = spl.tabel.baris.length - 1;
@@ -35,7 +35,7 @@ async function bacaLewatAwan(file, karyawan, setProgres, toast, jenis) {
     r = await api('/api/lembur-massal/baca-spl', { method: 'POST', body: { gambar: spl.gambar, jumlahBaris } });
   } catch (e) {
     toast(`${e.message} Dipakai pembaca lokal.`, true);
-    return null;
+    return { gagal: e.message };
   }
   setProgres({ persen: 90, tahap: 'Mencocokkan nama karyawan…' });
   let peta; let teks;
@@ -70,7 +70,7 @@ async function bacaLewatAwan(file, karyawan, setProgres, toast, jenis) {
   };
 }
 
-function UnggahFoto({ onHasil, karyawanSemua, awan }) {
+function UnggahFoto({ onHasil, karyawanSemua, awan, alasanTanpaAwan }) {
   const nama = NAMA_PEMBACA[awan];
   const toast = useToast();
   const [pratinjau, setPratinjau] = useState('');
@@ -83,13 +83,15 @@ function UnggahFoto({ onHasil, karyawanSemua, awan }) {
     setPratinjau(URL.createObjectURL(file));
     setProgres({ persen: 0, tahap: 'Menyiapkan…' });
     try {
+      let alasanLokal = alasanTanpaAwan;
       if (awan) {
         const ra = await bacaLewatAwan(file, karyawanSemua, setProgres, toast, awan);
-        if (ra) { onHasil(ra); return; }
+        if (!ra.gagal) { onHasil(ra); return; }
+        alasanLokal = `${NAMA_PEMBACA[awan]} gagal: ${ra.gagal}`;
       }
       const { bacaFotoSpl } = await import('../../lib/ocr.js');
       const r = await bacaFotoSpl(file, (persen, tahap) => setProgres({ persen, tahap }));
-      onHasil({ ...r, jenis: 'LOKAL', baca: bacaSpl(r.teks, karyawanSemua) });
+      onHasil({ ...r, jenis: 'LOKAL', alasanLokal, baca: bacaSpl(r.teks, karyawanSemua) });
     } catch (err) {
       const versiLama = /dynamically imported module|Importing a module script failed/i.test(err?.message || '');
       toast(versiLama ? 'Aplikasi baru diperbarui. Tutup lalu buka lagi lemburin (atau muat ulang halaman), kemudian coba lagi.'
@@ -331,7 +333,9 @@ export default function LemburMassal({ kecil = false }) {
         <button type="button" role="tab" aria-selected={mode === 'foto'} className={mode === 'foto' ? 'on' : ''} onClick={() => gantiMode('foto')}>Foto SPL</button>
       </div>
 
-      {mode === 'foto' && !foto && <UnggahFoto karyawanSemua={semuaRef.current} onHasil={terimaFoto} awan={['GROQ', 'GEMINI', 'AZURE'].includes(batas?.pembaca?.jenis) && batas.pembaca.sisa > 0 ? batas.pembaca.jenis : null} />}
+      {mode === 'foto' && !foto && <UnggahFoto karyawanSemua={semuaRef.current} onHasil={terimaFoto} awan={['GROQ', 'GEMINI', 'AZURE'].includes(batas?.pembaca?.jenis) && batas.pembaca.sisa > 0 ? batas.pembaca.jenis : null}
+        alasanTanpaAwan={!batas?.pembaca || batas.pembaca.jenis === 'LOKAL' ? 'pembaca tulisan tangan (Groq/Gemini/Azure) belum diaktifkan di server — isi GROQ_API_KEY di Render'
+          : `kuota ${NAMA_PEMBACA[batas.pembaca.jenis]} ${batas.pembaca.periode === 'hari' ? 'hari' : 'bulan'} ini habis (${batas.pembaca.jumlah}/${batas.pembaca.batas})`} />}
 
       {mode === 'foto' && foto && (
         <div className="glass ms-foto">
@@ -354,7 +358,12 @@ export default function LemburMassal({ kecil = false }) {
           </div>
           {foto.awan
             ? <p className="hint">Dibaca {NAMA_PEMBACA[foto.jenis]}{foto.pemakaian ? ` · kuota ${foto.pemakaian.periode === 'hari' ? 'hari' : 'bulan'} ini ${foto.pemakaian.jumlah}/${foto.pemakaian.batas}` : ''}. Periksa tiap baris di bawah: baris kuning belum dicocokkan otomatis.</p>
-            : <p className="hint">Periksa kembali: hapus centang yang salah, centang yang terlewat. Badge kuning berarti nama hanya mirip.</p>}
+            : (
+              <>
+                <p className="ms-peringatan" role="status"><b>Dibaca pembaca lokal</b>, yang hanya cocok untuk huruf cetak dan hasilnya kurang akurat untuk tulisan tangan.{foto.alasanLokal ? <> Penyebab: {foto.alasanLokal}.</> : ''}</p>
+                <p className="hint">Periksa kembali: hapus centang yang salah, centang yang terlewat. Badge kuning berarti nama hanya mirip.</p>
+              </>
+            )}
         </div>
       )}
 

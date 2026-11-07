@@ -68,7 +68,7 @@ after(() => { server?.close(); groq.close(); });
 test('Groq didahulukan dari Gemini dan melaporkan batas harian', async () => {
   const r = await api('/api/lembur-massal/batas');
   assert.equal(r.data.pembaca.jenis, 'GROQ');
-  assert.equal(r.data.pembaca.model, 'qwen/qwen3.8-27b');
+  assert.equal(r.data.pembaca.model, 'qwen/qwen3.6-27b');
   assert.equal(r.data.pembaca.sisa, 6);
 });
 
@@ -83,7 +83,7 @@ test('gambar dikirim sebagai pesan vision, jawaban <think>/```json dibersihkan',
   const p = permintaan.at(-1);
   assert.equal(p.url, '/openai/v1/chat/completions');
   assert.equal(p.auth, 'Bearer gsk_uji');
-  assert.equal(p.body.model, 'qwen/qwen3.8-27b');
+  assert.equal(p.body.model, 'qwen/qwen3.6-27b');
   assert.equal(p.body.response_format.type, 'json_object');
   assert.equal(p.body.reasoning_format, 'hidden');
   const isi = p.body.messages[1].content;

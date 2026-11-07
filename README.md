@@ -278,7 +278,7 @@ sebagai penanggung jawab.
 ### Pembaca SPL tulisan tangan (Groq) — gratis, tanpa kartu
 
 Urutan pembaca: **Groq → Gemini → Azure → pembaca lokal di HP** (yang pertama diatur yang dipakai;
-kalau gagal, aplikasi kembali ke pembaca lokal). Groq memakai model vision (bawaan `qwen/qwen3.8-27b`)
+kalau gagal, aplikasi kembali ke pembaca lokal). Groq memakai model vision (bawaan `qwen/qwen3.6-27b`)
 dan langsung mengembalikan isi tabel per baris; pencocokan nama ke data karyawan tetap di HP.
 Yang dikirim hanya baris Hari/Tanggal + kolom NAMA s/d ALASAN, hitam-putih. Groq tidak menyimpan isi
 permintaan secara bawaan.

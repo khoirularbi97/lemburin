@@ -2,7 +2,8 @@
 // Daftar gratis di console.groq.com tanpa kartu; Groq tidak menyimpan isi permintaan secara bawaan.
 // Env:
 //   GROQ_API_KEY          kunci dari console.groq.com → API Keys
-//   GROQ_MODEL            bawaan qwen/qwen3.8-27b (model vision di Groq)
+//   GROQ_MODEL            bawaan qwen/qwen3.6-27b (model vision di Groq). Kalau model yang diisi tidak ada,
+//                         otomatis dicoba ulang dengan model bawaan.
 //   GROQ_BATAS_HARIAN     batas baca SPL per hari (bawaan 100)
 // Yang dikirim hanya potongan kolom tabel SPL (tanpa kop perusahaan & tanda tangan).
 import { prisma } from './prisma.js';
@@ -11,11 +12,14 @@ import { HttpError } from './util.js';
 import { perintah, rapikanTabel } from './geminiOcr.js';
 
 const KUNCI = process.env.GROQ_API_KEY || '';
-const MODEL = process.env.GROQ_MODEL || 'qwen/qwen3.8-27b';
+export const MODEL_BAWAAN = 'qwen/qwen3.6-27b';
+const MODEL_ENV = (process.env.GROQ_MODEL || '').trim() || MODEL_BAWAAN;
+// Model yang sedang dipakai; diganti ke MODEL_BAWAAN kalau MODEL_ENV ternyata tidak ada di Groq
+let MODEL = MODEL_ENV;
 const ENDPOINT = (process.env.GROQ_ENDPOINT || 'https://api.groq.com').replace(/\/+$/, '');
 export const BATAS_HARIAN = Math.max(0, Number(process.env.GROQ_BATAS_HARIAN ?? 100) || 0);
 export const groqAktif = Boolean(KUNCI);
-export const modelGroq = MODEL;
+export const modelGroq = () => MODEL;
 
 const kunciHari = () => `groq:${waktuJakarta().tanggal}`;
 
@@ -88,6 +92,12 @@ export async function bacaSplGroq(buf, mime, jumlahBaris) {
     }
     json = await res.json().catch(() => null);
     const pesan = json?.error?.message || '';
+    // Model di GROQ_MODEL tidak ada (salah ketik / sudah dihapus Groq): pakai model bawaan
+    if ((res.status === 404 || /model.*(not found|does not exist|decommissioned)/i.test(pesan)) && MODEL !== MODEL_BAWAAN) {
+      console.warn(`[groq] model ${MODEL} tidak tersedia, beralih ke ${MODEL_BAWAAN}. Perbaiki GROQ_MODEL di Render.`);
+      MODEL = MODEL_BAWAAN;
+      continue;
+    }
     // Model yang bukan model "nalar" menolak reasoning_format: ulangi tanpa itu
     if (res.status === 400 && nalar && /reasoning/i.test(pesan)) { nalar = false; continue; }
     // JSON mode gagal di sisi Groq: coba sekali lagi
