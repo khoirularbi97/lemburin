@@ -89,7 +89,13 @@ h1, h2, h3 { text-wrap: balance; }
 
 /* ===== Login ===== */
 .login { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 32px max(16px, var(--sa-right)) 32px max(16px, var(--sa-left)); position: relative; overflow: hidden; }
-.login-card { position: relative; width: min(420px, 100%); border-radius: 28px; padding: 26px 22px; display: flex; flex-direction: column; gap: 16px; }
+.login-isi { position: relative; width: min(420px, 100%); display: flex; flex-direction: column; gap: 22px; }
+.login-kepala { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0 6px; }
+.login-kepala img { width: 92px; height: 92px; margin-bottom: 12px; filter: drop-shadow(0 16px 20px rgba(18,21,43,.35)); transform: rotate(-6deg); }
+.login-kepala h1 { margin: 0; font-size: clamp(40px, 12vw, 52px); font-weight: 800; letter-spacing: -.04em; line-height: 1; }
+.login-kepala h1 span { color: var(--teal); }
+.login-kepala p { margin: 6px 0 0; font-size: 17px; line-height: 1.45; color: var(--muted); max-width: 34ch; }
+.login-card { position: relative; width: 100%; border-radius: 28px; padding: 26px 22px; display: flex; flex-direction: column; gap: 16px; }
 .orb-deco { position: absolute; border-radius: 50%; pointer-events: none; }
 
 /* ===== Aplikasi petugas ===== */
