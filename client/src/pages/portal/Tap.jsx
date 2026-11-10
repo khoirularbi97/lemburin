@@ -103,7 +103,7 @@ function Hasil({ r, upahSejam, onTutup }) {
           <div className="glass kv">
             <div><span>Tanggal</span><b>{tanggalPendek(l.tanggal)} · {l.jenisHari === 'KERJA' ? 'Hari kerja' : 'Hari libur'}</b></div>
             <div><span>Tap in – tap out</span><b className="num">{l.jamMulai}–{l.jamSelesai} WIB</b></div>
-            {r.hitung?.mulaiDihitung && r.hitung.mulaiDihitung !== l.jamMulai && <div><span>Dihitung mulai</span><b className="num">{r.hitung.mulaiDihitung} (jam pulang)</b></div>}
+            {r.hitung?.mulaiDihitung && r.hitung.mulaiDihitung !== l.jamMulai && <div><span>Dihitung mulai</span><b className="num">{r.hitung.mulaiDihitung} ({r.hitung.shift ? `di luar jam ${r.hitung.shift.nama}` : 'jam pulang'})</b></div>}
             {r.hitung?.menitIstirahat > 0 && <div><span>Istirahat dipotong</span><b className="num">{r.hitung.menitIstirahat} menit</b></div>}
             <div><span>Lama lembur dihitung</span><b className="num">{durasi(l.menitLembur)}</b></div>
             <div><span>Jam hitung</span><b className="num">{jamFmt(l.jamHitung)} jam</b></div>
@@ -111,7 +111,7 @@ function Hasil({ r, upahSejam, onTutup }) {
           </div>
           <RincianTarif rincian={l.rincian} upahSejam={upahSejam} />
 
-          {l.peringatan?.filter((p) => !/jam pulang/.test(p)).map((p) => <p key={p} className="hint">⚠ {p}</p>)}
+          {l.peringatan?.filter((p) => !/jam pulang|tidak dihitung lembur/.test(p)).map((p) => <p key={p} className="hint">⚠ {p}</p>)}
         </>
       )}
       <div className="acts"><button type="button" className="btn" onClick={onTutup} autoFocus>Selesai</button></div>
@@ -172,7 +172,7 @@ export default function Tap() {
     try {
       kira = hitungLemburAktual({
         upahBulanan: d.upahSejam * 173, tanggal: sesi.tanggal, mulai: sesi.jamMulai, selesai: jamSekarangWIB(),
-        libur: sesi.libur != null ? new Map([[sesi.tanggal, sesi.libur]]) : new Map(), aturan: d.aturan,
+        libur: sesi.libur != null ? new Map([[sesi.tanggal, sesi.libur]]) : new Map(), aturan: d.aturan, jamKerja: d.shift,
       });
     } catch { kira = null; }
   }
@@ -239,7 +239,7 @@ export default function Tap() {
               <span className="lbl">Sedang lembur sejak {sesi.jamMulai} WIB{sesi.tanggal !== d.hariIni.tanggal ? ` (${tanggalPendek(sesi.tanggal)})` : ''}</span>
               <span className="big num">{durasi(menitJalan)}</span>
               {kira && <span className="sub num">Kalau tap out sekarang ≈ {durasi(kira.menitLembur)} dihitung · {jamFmt(kira.jamHitung)} jam hitung · {rp(kira.nominal)}</span>}
-              {kira?.jenisHari === 'KERJA' && kira.mulaiDihitung !== sesi.jamMulai && <span className="sub">Lembur hari kerja dihitung mulai jam pulang {kira.mulaiDihitung}.</span>}
+              {kira?.jenisHari === 'KERJA' && kira.mulaiDihitung !== sesi.jamMulai && <span className="sub">{d.shift ? `Jam ${d.shift.nama} (${d.shift.masuk}–${d.shift.pulang}) tidak dihitung lembur.` : `Lembur hari kerja dihitung mulai jam pulang ${kira.mulaiDihitung}.`}</span>}
             </div>
           ) : lemburHariIni ? (
             <div className="glass today">
@@ -249,7 +249,7 @@ export default function Tap() {
           ) : (
             <div className="glass today">
               <Tile icon="clock" warna={d.hariIni.jenis === 'LIBUR' ? 't-amber' : 't-indigo'} size={44} />
-              <div className="t"><b>Belum tap in</b><span>{d.hariIni.jenis === 'KERJA' ? `Hari kerja: lembur dihitung mulai jam pulang ${d.aturan.jamPulang}.` : 'Hari libur: lembur dihitung sejak tap in.'}</span></div>
+              <div className="t"><b>Belum tap in</b><span>{d.hariIni.jenis !== 'KERJA' ? 'Hari libur: lembur dihitung sejak tap in.' : d.shift ? `Hari kerja, ${d.shift.nama} (${d.shift.masuk}–${d.shift.pulang}): lembur dihitung di luar jam shift.` : `Hari kerja: lembur dihitung mulai jam pulang ${d.aturan.jamPulang}.`}</span></div>
             </div>
           )}
 
@@ -280,7 +280,7 @@ export default function Tap() {
               <li>Pindai QR di HP petugas area Anda.</li>
               <li>Selesai lembur: ulangi dengan tombol <b>Tap out</b>. Jam lembur dihitung otomatis sesuai PP 35/2021.</li>
             </ol>
-            <p className="hint">Aturan: {d.aturan.polaKerja} hari kerja/minggu · jam pulang {d.aturan.jamPulang} · dibulatkan per {d.aturan.pembulatanMenit} menit
+            <p className="hint">Aturan: {d.aturan.polaKerja} hari kerja/minggu · {d.shift ? `${d.shift.nama} ${d.shift.masuk}–${d.shift.pulang} (grup ${d.shift.grup})` : `jam pulang ${d.aturan.jamPulang}`} · dibulatkan per {d.aturan.pembulatanMenit} menit
               {d.aturan.istirahat?.length ? ` · istirahat ${d.aturan.istirahat.map((r) => `${r.mulai}–${r.selesai}`).join(', ')} tidak dihitung` : ''}.</p>
             {d.wajah !== 'BELUM' && <button type="button" className="link danger" style={{ alignSelf: 'flex-start' }} onClick={() => setTanya('hapus')}>Hapus data wajah saya</button>}
           </div>

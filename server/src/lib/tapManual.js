@@ -1,6 +1,7 @@
 // Tap manual dipakai di dua tempat: admin menambah langsung dari Rekap, dan
 // admin menyetujui pengajuan karyawan. Aturannya harus sama persis.
-import { cekTanggalManual, hitungLembur, hitungLemburAktual, jamWIB, keTanggalDb } from './lembur.js';
+import { cekTanggalManual, hitungLembur, hitungLemburAktual, jamWIB, keTanggalDb, menitGantiHari } from './lembur.js';
+import { jamKerjaKaryawan } from './shift.js';
 import { ambilAturan, jejakAturan } from './aturanLembur.js';
 import { HttpError } from './util.js';
 
@@ -45,21 +46,30 @@ export async function buatTapManual(db, { karyawan, tanggal, jam, mulai = null, 
   const aturan = await ambilAturan(db);
   let aktual = {};
   let hasil;
+  const menit = (s) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
+  // Fitur shift: jam sebelum jam ganti hari (mis. 02.00) adalah dini hari setelah tanggal kerja
+  const ganti = menitGantiHari(aturan);
+  const waktuPada = (hhmm) => {
+    const t = new Date(`${tanggal}T${hhmm}:00+07:00`);
+    return ganti && menit(hhmm) < ganti ? new Date(t.getTime() + 86400000) : t;
+  };
   if (mulai) {
-    hasil = hitungLemburAktual({ upahBulanan: karyawan.upahBulanan, tanggal, libur, mulai, selesai: jam, aturan });
+    const jamKerja = await jamKerjaKaryawan(db, karyawan, tanggal, aturan);
+    hasil = hitungLemburAktual({ upahBulanan: karyawan.upahBulanan, tanggal, libur, mulai, selesai: jam, aturan, jamKerja });
     if (hasil.menitLembur <= 0) {
-      throw new HttpError(400, `${karyawan.nama}: tidak ada jam lembur dari ${mulai} sampai ${jam}${hasil.jenisHari === 'KERJA' ? ` (lembur hari kerja dihitung mulai ${hasil.mulaiDihitung})` : ''}.`, { kode: 'NOL_JAM' });
+      const sebab = hasil.jenisHari !== 'KERJA' ? '' : jamKerja ? ` (masih jam kerja ${jamKerja.nama} ${jamKerja.masuk}–${jamKerja.pulang})` : ` (lembur hari kerja dihitung mulai ${hasil.mulaiDihitung})`;
+      throw new HttpError(400, `${karyawan.nama}: tidak ada jam lembur dari ${mulai} sampai ${jam}${sebab}.`, { kode: 'NOL_JAM' });
     }
     // Selesai lebih kecil dari mulai = lewat tengah malam (hari berikutnya)
-    const menit = (s) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
     const durasi = ((menit(jam) - menit(mulai) + 1440) % 1440) || 1440;
-    const t0 = new Date(`${tanggal}T${mulai}:00+07:00`);
+    const t0 = waktuPada(mulai);
     const t1 = new Date(t0.getTime() + durasi * 60000);
     aktual = {
       metode: 'AKTUAL', mulai: t0, selesai: t1, menitLembur: hasil.menitLembur,
       rincianHitung: {
         rincian: hasil.rincian, mulaiDihitung: hasil.mulaiDihitung, menitKotor: hasil.menitKotor,
         menitIstirahat: hasil.menitIstirahat, peringatan: hasil.peringatan, aturan: jejakAturan(aturan),
+        ...(jamKerja ? { shift: { kode: jamKerja.kode, nama: jamKerja.nama, grup: jamKerja.grup, masuk: jamKerja.masuk, pulang: jamKerja.pulang } } : {}),
       },
     };
   } else {
@@ -69,7 +79,7 @@ export async function buatTapManual(db, { karyawan, tanggal, jam, mulai = null, 
     data: {
       karyawanId: karyawan.id,
       tanggal: keTanggalDb(tanggal),
-      waktuTap: aktual.selesai || new Date(`${tanggal}T${jam}:00+07:00`),
+      waktuTap: aktual.selesai || waktuPada(jam),
       jenisHari: hasil.jenisHari,
       jamHitung: hasil.jamHitung,
       upahSejam: hasil.upahSejam,

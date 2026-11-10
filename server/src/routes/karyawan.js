@@ -15,6 +15,8 @@ const skemaKaryawan = z.object({
   departemen: z.string().trim().min(1),
   jabatan: z.string().trim().default('Operator'),
   upahBulanan: z.coerce.number().int().min(1_000_000, 'Upah minimal Rp1.000.000'),
+  // Grup shift (rotasi mingguan shift 1 / shift 2); kosong = non-shift
+  grup: z.string().trim().toUpperCase().max(10).nullable().optional().transform((g) => g || null),
 });
 
 // sandiHash tidak pernah dikirim ke browser

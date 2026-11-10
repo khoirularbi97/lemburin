@@ -6,6 +6,7 @@ import Icon from '../../components/Icon.jsx';
 import { Avatar, Tile, useToast } from '../../components/ui.jsx';
 import { hariIniWIB, jamFmt, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
 import { useKamera } from './useKamera.js';
+import InfoShift from '../../components/InfoShift.jsx';
 
 const REGION = 'qr-region';
 const REGION_FILE = 'qr-file-region';
@@ -171,6 +172,7 @@ export default function Scan() {
         </span>
         {hari && <span className={`badge ${libur ? 'b-warn' : 'b-ok'} num`}>{jamFmt(hari.jam)} jam / tap</span>}
       </div>
+      {hari?.shift && <InfoShift hari={hari} onUbah={(shift) => setHari((h) => ({ ...h, shift }))} />}
 
       <div className="vf">
         <div id={REGION} />

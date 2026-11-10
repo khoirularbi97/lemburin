@@ -66,6 +66,8 @@ model Karyawan {
   /// Token login yang dibuat sebelum waktu ini ditolak (setelah ganti/reset sandi)
   sandiDiubah     DateTime?
   loginTerakhir   DateTime?
+  /// Grup shift (mis. A / B) untuk rotasi mingguan shift 1 / shift 2. Kosong = karyawan non-shift
+  grup            String?
   /// Izin tap eksklusif: scan ID card sendiri + wajah (sekali scan, dihitung seperti scan petugas). Kosong = tidak punya izin
   eksklusifSampai DateTime?
   eksklusifAlasan String?
@@ -284,4 +286,12 @@ model Pengaturan {
   kunci  String   @id
   nilai  Json
   diubah DateTime @updatedAt
+}
+
+/// Penanda per tanggal kerja: shift 1 lembur → shift 2 masuk 19.30–03.30 (bukan 16.00–24.00)
+model HariShift {
+  tanggal      DateTime @id @db.Date
+  shift1Lembur Boolean  @default(false)
+  diubahOlehId Int?
+  updatedAt    DateTime @updatedAt
 }

@@ -4,9 +4,10 @@ import { prisma } from '../lib/prisma.js';
 import { kabariTapTercatat } from '../lib/notifikasi.js';
 import { buatQrMandiri } from '../lib/qrMandiri.js';
 import { ambilAturan } from '../lib/aturanLembur.js';
+import { infoShift } from '../lib/shift.js';
 import { ah, ringkasKaryawan } from '../lib/util.js';
 import {
-  dariTanggalDb, hitungLembur, jamWIB, jenisHari, keTanggalDb, waktuJakarta,
+  dariTanggalDb, hitungLembur, jamWIB, jenisHari, keTanggalDb, tanggalKerja, waktuJakarta,
 } from '../lib/lembur.js';
 
 const router = Router();
@@ -25,16 +26,26 @@ function waktuScan(simulasi) {
   return { ...waktuJakarta(), simulasi: false };
 }
 
+/**
+ * Waktu scan + tanggal hari kerja. Dengan fitur shift, scan sebelum jam ganti hari (mis. 07.00) dihitung
+ * untuk hari kerja sebelumnya (lembur shift 2 lewat tengah malam). `tanggalAsli` = tanggal kalender.
+ */
+async function waktuKerja(simulasi) {
+  const w = waktuScan(simulasi);
+  const aturan = await ambilAturan();
+  return { ...w, tanggalAsli: w.tanggal, tanggal: tanggalKerja(w.tanggal, w.jam, aturan), aturan };
+}
+
 async function liburPada(tanggal) {
   const h = await prisma.hariLibur.findUnique({ where: { tanggal: keTanggalDb(tanggal) } });
   return h ? new Map([[tanggal, h.keterangan]]) : new Map();
 }
 
-async function catatDitolak({ tanggal, jam, karyawanId, alasan, petugasId }) {
+async function catatDitolak({ tanggal, tanggalAsli, jam, karyawanId, alasan, petugasId }) {
   await prisma.tapDitolak.create({
     data: {
       tanggal: keTanggalDb(tanggal),
-      waktu: new Date(`${tanggal}T${jam}:00+07:00`),
+      waktu: new Date(`${tanggalAsli || tanggal}T${jam}:00+07:00`),
       karyawanId: karyawanId ?? null,
       alasan,
       petugasId,
@@ -64,7 +75,7 @@ router.get('/qr-mandiri', ah(async (req, res) => {
 // Leader bisa langsung melihat kalau ada nama yang orangnya tidak ada di depannya.
 router.get('/qr-mandiri/pemakai', ah(async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  const { tanggal } = waktuScan(req.query.simulasi);
+  const { tanggal } = await waktuKerja(req.query.simulasi);
   const tgl = keTanggalDb(tanggal);
   const [sesi, lembur] = await Promise.all([
     prisma.sesiLembur.findMany({ where: { petugasId: req.user.id }, include: { karyawan: true } }),
@@ -82,9 +93,9 @@ router.get('/qr-mandiri/pemakai', ah(async (req, res) => {
 
 // Info hari ini untuk ditampilkan di layar scanner
 router.get('/hari-ini', ah(async (req, res) => {
-  const { tanggal, jam } = waktuScan(req.query.simulasi);
-  const hari = jenisHari(tanggal, await liburPada(tanggal), await ambilAturan());
-  res.json({ tanggal, jam, ...hari });
+  const { tanggal, jam, tanggalAsli, aturan } = await waktuKerja(req.query.simulasi);
+  const hari = jenisHari(tanggal, await liburPada(tanggal), aturan);
+  res.json({ tanggal, jam, tanggalKalender: tanggalAsli, ...hari, shift: await infoShift(prisma, tanggal, aturan) });
 }));
 
 const skemaScan = z.object({
@@ -94,7 +105,7 @@ const skemaScan = z.object({
 
 router.post('/', ah(async (req, res) => {
   const { token, simulasi } = skemaScan.parse(req.body);
-  const { tanggal, jam } = waktuScan(simulasi);
+  const { tanggal, jam, tanggalAsli, aturan } = await waktuKerja(simulasi);
   const petugasId = req.user.id;
 
   const karyawan = await prisma.karyawan.findUnique({ where: { qrToken: token } });
@@ -102,7 +113,7 @@ router.post('/', ah(async (req, res) => {
   if (!karyawan) {
     const lama = await prisma.qrTokenLama.findUnique({ where: { token }, include: { karyawan: true } });
     await catatDitolak({
-      tanggal, jam, karyawanId: lama?.karyawanId, petugasId,
+      tanggal, tanggalAsli, jam, karyawanId: lama?.karyawanId, petugasId,
       alasan: lama ? 'QR lama (kartu sudah diganti)' : 'QR tidak dikenal',
     });
     return res.status(lama ? 410 : 404).json({
@@ -117,7 +128,7 @@ router.post('/', ah(async (req, res) => {
   }
 
   if (!karyawan.aktif) {
-    await catatDitolak({ tanggal, jam, karyawanId: karyawan.id, petugasId, alasan: 'Karyawan nonaktif' });
+    await catatDitolak({ tanggal, tanggalAsli, jam, karyawanId: karyawan.id, petugasId, alasan: 'Karyawan nonaktif' });
     return res.status(403).json({
       status: 'DITOLAK', kode: 'KARYAWAN_NONAKTIF',
       pesan: 'Data karyawan ini sedang dinonaktifkan. Hubungi admin.',
@@ -126,14 +137,14 @@ router.post('/', ah(async (req, res) => {
   }
 
   const libur = await liburPada(tanggal);
-  const hasil = hitungLembur({ upahBulanan: karyawan.upahBulanan, tanggal, libur, aturan: await ambilAturan() });
+  const hasil = hitungLembur({ upahBulanan: karyawan.upahBulanan, tanggal, libur, aturan });
 
   try {
     const tap = await prisma.lembur.create({
       data: {
         karyawanId: karyawan.id,
         tanggal: keTanggalDb(tanggal),
-        waktuTap: new Date(`${tanggal}T${jam}:00+07:00`),
+        waktuTap: new Date(`${tanggalAsli}T${jam}:00+07:00`),
         jenisHari: hasil.jenisHari,
         jamHitung: hasil.jamHitung,
         upahSejam: hasil.upahSejam,
@@ -156,7 +167,7 @@ router.post('/', ah(async (req, res) => {
       where: { karyawanId_tanggal: { karyawanId: karyawan.id, tanggal: keTanggalDb(tanggal) } },
       include: { petugas: { select: { username: true } } },
     });
-    await catatDitolak({ tanggal, jam, karyawanId: karyawan.id, petugasId, alasan: 'Tap ganda' });
+    await catatDitolak({ tanggal, tanggalAsli, jam, karyawanId: karyawan.id, petugasId, alasan: 'Tap ganda' });
     return res.status(409).json({
       status: 'DITOLAK', kode: 'SUDAH_TAP',
       pesan: 'Satu karyawan hanya bisa tap lembur satu kali per hari. Tap ini tidak dihitung.',
@@ -169,7 +180,7 @@ router.post('/', ah(async (req, res) => {
 
 // Riwayat petugas yang sedang login, untuk hari ini
 router.get('/saya', ah(async (req, res) => {
-  const { tanggal } = waktuScan(req.query.simulasi);
+  const { tanggal } = await waktuKerja(req.query.simulasi);
   const where = { tanggal: keTanggalDb(tanggal), petugasId: req.user.id };
   const [tercatat, ditolak] = await Promise.all([
     prisma.lembur.findMany({ where, include: { karyawan: true }, orderBy: { waktuTap: 'desc' } }),

@@ -22,3 +22,21 @@ test('hitungLemburAktual client = server untuk banyak kombinasi', () => {
   assert.ok(n > 2000);
   assert.deepEqual(klien.ATURAN_AKTUAL_BAWAAN, server.ATURAN_AKTUAL_BAWAAN);
 });
+
+test('client = server dengan shift (jam ganti hari 07.00, jam kerja shift, rotasi grup)', () => {
+  const shift = { aktif: true, gantiHari: '07:00', shift1: { masuk: '07:00', pulang: '16:00' }, shift2: { masuk: '16:00', pulang: '00:00' }, shift2Lembur: { masuk: '19:30', pulang: '03:30' }, acuanSenin: '2026-11-09', grupShift1: 'A', grup: ['A', 'B'] };
+  const aturan = { pembulatanMenit: 15, istirahat: [{ mulai: '12:00', selesai: '13:00' }, { mulai: '00:00', selesai: '00:30' }], shift };
+  const jam = ['00:00', '02:30', '03:30', '05:00', '06:59', '07:00', '15:00', '16:00', '19:30', '22:00', '23:45'];
+  let n = 0;
+  for (const t of ['2026-11-11', '2026-11-13', '2026-11-15', '2026-11-18']) for (const g of ['A', 'B', null]) for (const s1l of [false, true]) {
+    const jk = klien.jadwalShift({ grup: g, tanggal: t, aturan, shift1Lembur: s1l });
+    assert.deepEqual(jk, server.jadwalShift({ grup: g, tanggal: t, aturan, shift1Lembur: s1l }));
+    for (const m of jam) for (const s of jam) {
+      const o = { upahBulanan: 5_190_000, tanggal: t, mulai: m, selesai: s, aturan, jamKerja: jk };
+      assert.deepEqual(klien.hitungLemburAktual(o), server.hitungLemburAktual(o), JSON.stringify(o));
+      n += 1;
+    }
+    assert.equal(klien.tanggalKerja(t, '03:00', aturan), server.tanggalKerja(t, '03:00', aturan));
+  }
+  assert.ok(n > 2500);
+});

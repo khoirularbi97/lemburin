@@ -13,6 +13,7 @@ import { azureAktif, bacaGambar, pemakaian } from '../lib/azureOcr.js';
 import { bacaSplGemini, geminiAktif, modelGemini, pemakaianGemini } from '../lib/geminiOcr.js';
 import { bacaSplGroq, groqAktif, modelGroq, pemakaianGroq } from '../lib/groqOcr.js';
 import { bacaFoto as ambilFoto, bersihkanFotoLama, buangFoto, MASA_SIMPAN_BULAN, simpanFoto } from '../lib/fotoSpl.js';
+import { infoShift } from '../lib/shift.js';
 
 const router = Router();
 const MAKS_KARYAWAN = 300;
@@ -79,11 +80,13 @@ router.get('/karyawan', ah(async (req, res) => {
     // Untuk pratinjau hitungan jam aktual di layar (hasil akhir tetap dihitung server)
     aturan,
     libur: libur.has(tanggal) ? libur.get(tanggal) || 'Hari libur' : null,
+    // Jadwal shift tanggal ini (null kalau fitur shift mati) untuk pratinjau jam aktual per karyawan
+    shift: await infoShift(prisma, tanggal, aturan),
     lingkup: lingkup(req.user).departemen || 'Semua',
     karyawan: list.map((k) => {
       const t = tapPer.get(k.id);
       return {
-        id: k.id, nik: k.nik, nama: k.nama, departemen: k.departemen, jabatan: k.jabatan,
+        id: k.id, nik: k.nik, nama: k.nama, departemen: k.departemen, jabatan: k.jabatan, grup: k.grup || null,
         // Upah hanya untuk admin; petugas cukup melihat jam hitung
         ...(admin ? { nominal: hitungLembur({ upahBulanan: k.upahBulanan, tanggal, libur, aturan }).nominal, upahSejam: upahSejam(k.upahBulanan) } : {}),
         sudahTap: t ? { jam: jamWIB(t.waktuTap), manual: t.manual, oleh: t.petugas.username } : null,

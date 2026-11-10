@@ -432,3 +432,14 @@ tr.warn td { background: rgba(255, 196, 0, .09); }
 .ms-peringatan { margin: 0; padding: 10px 12px; border-radius: 12px; background: #FFF4DC; color: #7A4B00; font-size: 13px; line-height: 1.45; }
 .ms-peringatan b { color: #5C3700; }
 label.btn[aria-disabled="true"] { opacity: .55; pointer-events: none; }
+/* Shift */
+.info-shift { border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.shift-grup { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--muted); }
+.shift-grup b { color: var(--ink); }
+.jam-rentang { display: flex; align-items: center; gap: 8px; }
+.jam-rentang > span { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.jam-rentang .input { width: auto; min-width: 0; flex: 1 1 0; }
+.jam-rentang select.input { flex: 0 0 104px; }
+.sh-grid { display: grid !important; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; align-items: end; }
+.jam-rentang .input[type="time"] { min-width: 96px; }
+.jam-rentang .input[type="date"] { flex: 1 1 150px; min-width: 140px; }

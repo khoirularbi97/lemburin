@@ -9,7 +9,8 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { ah, HttpError, ringkasKaryawan } from '../lib/util.js';
-import { dariTanggalDb, hitungLembur, hitungLemburAktual, jamWIB, jenisHari, keTanggalDb, waktuSekarang } from '../lib/lembur.js';
+import { dariTanggalDb, hitungLembur, hitungLemburAktual, jamWIB, jenisHari, keTanggalDb, tanggalKerja, waktuSekarang } from '../lib/lembur.js';
+import { jamKerjaKaryawan } from '../lib/shift.js';
 import { liburPada, tapPada } from '../lib/tapManual.js';
 import { ambilAturan, jejakAturan } from '../lib/aturanLembur.js';
 import { periksaQrMandiri } from '../lib/qrMandiri.js';
@@ -53,6 +54,7 @@ export function bentukLemburAktual(t) {
     menitLembur: t.menitLembur, jenisHari: t.jenisHari, jamHitung: t.jamHitung, upahSejam: t.upahSejam,
     nominal: t.nominal, rincian: t.rincianHitung?.rincian || null, peringatan: t.rincianHitung?.peringatan || [],
     lokasi: t.rincianHitung?.lokasi || null,
+    shift: t.rincianHitung?.shift || null,
   };
 }
 
@@ -86,17 +88,25 @@ router.delete('/wajah', ah(async (req, res) => {
 
 // ---------- status & tap ----------
 
+/** Waktu sekarang + tanggal hari kerja (tap sebelum jam ganti hari ikut hari kerja sebelumnya). */
+async function waktuKerja(simulasi) {
+  const w = waktuSekarang(simulasi);
+  const aturan = await ambilAturan();
+  return { ...w, tanggal: tanggalKerja(w.tanggal, w.jam, aturan), aturan };
+}
+
 router.get('/tap', ah(async (req, res) => {
   const k = req.karyawan;
-  const { tanggal, waktu } = waktuSekarang(req.query.simulasi);
+  const { tanggal, waktu, aturan } = await waktuKerja(req.query.simulasi);
   const [wajah, sesi, hariIni, libur] = await Promise.all([
     prisma.wajahKaryawan.findUnique({ where: { karyawanId: k.id } }),
     prisma.sesiLembur.findUnique({ where: { karyawanId: k.id }, include: { petugas: { select: { nama: true, area: true } } } }),
     tapPada(prisma, k.id, tanggal),
     liburPada(prisma, tanggal),
   ]);
-  const aturan = await ambilAturan();
   const hari = jenisHari(tanggal, libur, aturan);
+  // Jam shift karyawan (untuk perkiraan di layar): tanggal tap in kalau sedang lembur, kalau tidak hari ini
+  const shift = await jamKerjaKaryawan(prisma, k, sesi ? dariTanggalDb(sesi.tanggal) : tanggal, aturan);
   // Untuk perkiraan jam hitung yang berjalan: status libur di tanggal tap in
   const liburSesi = sesi ? await liburPada(prisma, dariTanggalDb(sesi.tanggal)) : null;
   res.json({
@@ -105,6 +115,7 @@ router.get('/tap', ah(async (req, res) => {
     sesi: sesi ? { ...bentukSesi(sesi, waktu), libur: liburSesi.get(dariTanggalDb(sesi.tanggal)) ?? null } : null,
     hariIni: { tanggal, label: hari.label, keterangan: hari.keterangan, jenis: hari.jenis, lembur: hariIni ? bentukLemburAktual(hariIni) : null },
     aturan,
+    shift,
     eksklusif: izinEksklusif(k, new Date()),
     upahSejam: Math.round(k.upahBulanan / 173),
     waktuServer: waktu,
@@ -160,16 +171,19 @@ async function prosesTap(res, { k, tanggal, waktu, jarak, petugasId }) {
   }
   const tglLembur = dariTanggalDb(sesi.tanggal);
   const aturan = await ambilAturan();
+  const jamKerja = await jamKerjaKaryawan(prisma, k, tglLembur, aturan);
   const h = hitungLemburAktual({
     upahBulanan: k.upahBulanan, tanggal: tglLembur, libur: await liburPada(prisma, tglLembur),
-    mulai: jamWIB(sesi.mulai), selesai: jamWIB(waktu), aturan,
+    mulai: jamWIB(sesi.mulai), selesai: jamWIB(waktu), aturan, jamKerja,
   });
 
   if (h.menitLembur <= 0) {
     await prisma.sesiLembur.delete({ where: { id: sesi.id } });
     return res.json({
       status: 'TIDAK_DIHITUNG', hitung: h,
-      pesan: h.jenisHari === 'KERJA'
+      pesan: h.jenisHari === 'KERJA' && h.shift
+        ? `Tidak ada jam lembur: di hari kerja hanya waktu di luar jam ${h.shift.nama || 'shift'} (${h.shift.masuk}–${h.shift.pulang}) yang dihitung, minimal ${aturan.pembulatanMenit} menit.`
+        : h.jenisHari === 'KERJA'
         ? `Tidak ada jam lembur: lembur hari kerja dihitung mulai ${h.mulaiDihitung} dan minimal ${aturan.pembulatanMenit} menit.`
         : `Belum ada jam lembur yang terhitung (minimal ${aturan.pembulatanMenit} menit).`,
     });
@@ -186,6 +200,7 @@ async function prosesTap(res, { k, tanggal, waktu, jarak, petugasId }) {
           rincianHitung: {
             rincian: h.rincian, mulaiDihitung: h.mulaiDihitung, menitKotor: h.menitKotor, menitIstirahat: h.menitIstirahat,
             peringatan: h.peringatan, aturan: jejakAturan(aturan), petugasTapIn: sesi.petugasId,
+            ...(jamKerja ? { shift: { kode: jamKerja.kode, nama: jamKerja.nama, grup: jamKerja.grup, masuk: jamKerja.masuk, pulang: jamKerja.pulang } } : {}),
           },
         },
       });
@@ -207,7 +222,7 @@ async function prosesTap(res, { k, tanggal, waktu, jarak, petugasId }) {
 router.post('/tap', batasTap, ah(async (req, res) => {
   const k = req.karyawan;
   const d = skemaTap.parse(req.body);
-  const { tanggal, waktu } = waktuSekarang(d.simulasi);
+  const { tanggal, waktu } = await waktuKerja(d.simulasi);
 
   // 1. Wajah
   const jarak = await periksaWajah(k, d.vektor);
@@ -238,7 +253,7 @@ const skemaEksklusif = z.object({
 router.post('/tap-eksklusif', batasTap, ah(async (req, res) => {
   const k = req.karyawan;
   const d = skemaEksklusif.parse(req.body);
-  const { tanggal, waktu } = waktuSekarang(d.simulasi);
+  const { tanggal, waktu } = await waktuKerja(d.simulasi);
 
   // 0. Izin dari admin
   if (!izinEksklusif(k, new Date())) {

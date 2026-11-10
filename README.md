@@ -32,6 +32,27 @@ memanggil backend Render yang sama, jadi data selalu sinkron.
 
 Semua aturan ada di `server/src/lib/lembur.js` dan diuji di `server/test/lembur.test.js`.
 
+## Dua shift bergilir & lembur lewat tengah malam
+
+Aktifkan di **Panel admin → Tap mandiri & wajah → Aturan hitung → Pakai 2 shift bergilir per grup**.
+
+| Pengaturan | Bawaan |
+|---|---|
+| Shift 1 | 07.00–16.00 |
+| Shift 2 (shift 1 tidak lembur) | 16.00–24.00 |
+| Shift 2 (shift 1 lembur) | 19.30–03.30 |
+| Jam ganti hari kerja | 07.00 |
+| Rotasi | grup A / B bergantian tiap Senin, mulai dari minggu acuan |
+
+- **Grup** tiap karyawan diisi di Data karyawan (kosong = non-shift, memakai jam pulang normal).
+- **Tanggal hari kerja:** scan / tap sebelum jam ganti hari dihitung untuk hari kerja sebelumnya. Contoh: scan Sabtu 01.30
+  = lembur hari kerja **Jumat** (5,5 jam), bukan Sabtu (14 jam). Waktu tap tetap tercatat jam sebenarnya.
+- **Shift 1 lembur:** petugas/admin mencentang "Shift 1 lembur hari ini" di layar Scan atau Input massal; untuk tanggal itu
+  shift 2 dihitung masuk 19.30–03.30.
+- **Jam aktual** (tap mandiri, input massal dengan jam mulai): di hari kerja yang dihitung lembur hanya waktu **di luar jam
+  shift** karyawan (sebelum masuk atau setelah pulang). Hari libur: semua jam dihitung. Tarif PP 35 mengikuti tanggal hari kerja.
+- Scan ID card / tap eksklusif tetap 5,5 / 14 jam, hanya tanggalnya yang mengikuti hari kerja.
+
 ## Logo & branding
 
 Nama aplikasi ditulis **lemburin** (huruf kecil, "in" berwarna teal): akrab diucapkan, dan "in" juga terbaca sebagai *tap in* saat scan ID card. Untuk judul laporan atau skripsi, tetap sebutkan teknologinya, misalnya *lemburin: Sistem Penghitung Lembur Berbasis QR Code*.
@@ -521,6 +542,7 @@ Semua endpoint selain `/health` dan `/api/auth/login` butuh header
 | GET/POST/PATCH | `/api/pengguna`, `/api/pengguna/:id` | admin | Kelola akun: tambah, edit (username, nama, peran, area), aktif/nonaktif, reset sandi. Minimal satu admin aktif dijaga |
 | DELETE | `/api/pengguna/:id` | admin | Hapus akun. Ditolak (409) bila akun sudah mencatat tap/SPL; nonaktifkan saja |
 | GET | `/api/scan/qr-mandiri`, `/api/scan/qr-mandiri/pemakai` | admin, petugas | QR dinamis (berganti 10 detik) & daftar tap lewat QR itu hari ini |
+| GET/PUT | `/api/shift/hari` | petugas, admin | Jadwal shift tanggal kerja + penanda `{ tanggal, shift1Lembur }` |
 | GET/POST/DELETE | `/api/portal/tap` | karyawan | Status, tap in / tap out (wajah + QR), batal tap in |
 | POST | `/api/portal/tap-eksklusif` | karyawan berizin | Sekali scan wajah + ID card sendiri `{ kartu, vektor, hidup, lokasi }`, dihitung 5,5 / 14 jam |
 | GET/POST/DELETE | `/api/portal/wajah` | karyawan | Daftar / cabut data wajah |

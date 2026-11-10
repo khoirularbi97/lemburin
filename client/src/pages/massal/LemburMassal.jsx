@@ -4,7 +4,8 @@ import { useAuth } from '../../auth.jsx';
 import Icon from '../../components/Icon.jsx';
 import { Avatar, Memuat, Modal, useToast } from '../../components/ui.jsx';
 import { hariIniWIB, jamFmt, rp, tanggalPanjang, tanggalPendek } from '../../format.js';
-import { hitungLemburAktual } from '../../lib/hitungAktual.js';
+import { hitungLemburAktual, jadwalShift } from '../../lib/hitungAktual.js';
+import InfoShift from '../../components/InfoShift.jsx';
 import { bacaSpl } from '../../lib/bacaSpl.js';
 import { petakanSpl } from '../../lib/petaSpl.js';
 
@@ -215,11 +216,13 @@ export default function LemburMassal({ kecil = false }) {
   const dipilih = (data?.karyawan || []).filter((k) => pilih.has(k.id));
   const POLA_JAM = /^([01]\d|2[0-3]):[0-5]\d$/;
   /** Pratinjau PP 35/2021 untuk jam mulai–selesai di tanggal terpilih (hasil akhir dihitung server). */
-  const hitung = useCallback((mulai, selesai) => {
+  const hitung = useCallback((mulai, selesai, grup = null) => {
     if (!data || !POLA_JAM.test(mulai || '') || !POLA_JAM.test(selesai || '')) return null;
     try {
+      // Karyawan shift: lembur hari kerja = di luar jam shift-nya pada tanggal itu
+      const jamKerja = grup && data.shift ? jadwalShift({ grup, tanggal: data.tanggal, aturan: data.aturan, shift1Lembur: data.shift.shift1Lembur }) : null;
       return hitungLemburAktual({
-        upahBulanan: 173, tanggal: data.tanggal, mulai, selesai, aturan: data.aturan,
+        upahBulanan: 173, tanggal: data.tanggal, mulai, selesai, aturan: data.aturan, jamKerja,
         libur: data.libur != null ? new Map([[data.tanggal, data.libur]]) : new Map(),
       });
     } catch { return null; }
@@ -229,10 +232,12 @@ export default function LemburMassal({ kecil = false }) {
     const b = (barisSpl || []).find((x) => x.ikut && x.karyawanId === id);
     return { mulai: b?.mulai || f.mulai, selesai: b?.jam || f.jam };
   };
-  const perOrang = dipilih.map((k) => { const j = jamUntuk(k.id); const h = hitung(j.mulai, j.selesai); return { k, ...j, h }; });
+  const perOrang = dipilih.map((k) => { const j = jamUntuk(k.id); const h = hitung(j.mulai, j.selesai, k.grup); return { k, ...j, h }; });
   const totalJamHitung = perOrang.reduce((s2, x) => s2 + (x.h?.jamHitung || 0), 0);
   const total = perOrang.reduce((s2, x) => s2 + Math.round((x.h?.jamHitung || 0) * (x.k.upahSejam || 0)), 0);
   const hUmum = hitung(f.mulai, f.jam);
+  // Dengan shift: pratinjau per grup (jam shift berbeda)
+  const hShift = data?.shift ? Object.entries(data.shift.grup).map(([g, j]) => [g, j, hitung(f.mulai, f.jam, g)]) : [];
 
   const ubah = (k) => (e) => { setF({ ...f, [k]: e.target.value }); setErr(''); };
   const togel = (id) => setPilih((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -459,10 +464,14 @@ export default function LemburMassal({ kecil = false }) {
             {data && f.tanggal && (
               <p className="full hint" style={{ margin: 0 }}>
                 {tanggalPanjang(f.tanggal)} · <span className={`badge ${data.hari.jenis === 'KERJA' ? 'b-ok' : 'b-warn'}`}>{data.hari.label}{data.hari.keterangan ? ` · ${data.hari.keterangan}` : ''}</span>
-                {hUmum ? <> · {f.mulai}–{f.jam}: {hUmum.mulaiDihitung !== f.mulai ? `dihitung mulai ${hUmum.mulaiDihitung} (jam pulang), ` : ''}{hUmum.menitIstirahat ? `istirahat ${hUmum.menitIstirahat} menit dipotong, ` : ''}<b>{jamFmt(hUmum.jamLembur)} jam lembur = {jamFmt(hUmum.jamHitung)} jam hitung</b> ({hUmum.rincian.map((q) => `${jamFmt(q.jam)}×${jamFmt(q.kali)}`).join(' + ') || '0'}) per orang</>
+                {hShift.length > 0 && hUmum ? <> · {f.mulai}–{f.jam}:{hShift.map(([g, j, h]) => h && <span key={g} style={{ display: 'block' }}>Grup {g} ({j.nama} {j.masuk}–{j.pulang}): <b>{jamFmt(h.jamLembur)} jam lembur = {jamFmt(h.jamHitung)} jam hitung</b></span>)}</>
+                  : hUmum ? <> · {f.mulai}–{f.jam}: {hUmum.mulaiDihitung !== f.mulai ? `dihitung mulai ${hUmum.mulaiDihitung} (jam pulang), ` : ''}{hUmum.menitIstirahat ? `istirahat ${hUmum.menitIstirahat} menit dipotong, ` : ''}<b>{jamFmt(hUmum.jamLembur)} jam lembur = {jamFmt(hUmum.jamHitung)} jam hitung</b> ({hUmum.rincian.map((q) => `${jamFmt(q.jam)}×${jamFmt(q.kali)}`).join(' + ') || '0'}) per orang</>
                   : ' · isi jam mulai & selesai untuk melihat hitungan PP 35/2021'}
-                {hUmum?.peringatan?.filter((q) => !/jam pulang/.test(q)).map((q) => <span key={q} className="err" style={{ display: 'block' }}>⚠ {q}</span>)}
+                {!hShift.length && hUmum?.peringatan?.filter((q) => !/jam pulang/.test(q)).map((q) => <span key={q} className="err" style={{ display: 'block' }}>⚠ {q}</span>)}
               </p>
+            )}
+            {data?.shift && f.tanggal && (
+              <div className="full"><InfoShift hari={{ tanggal: data.tanggal, shift: data.shift }} tanggal={data.tanggal} onUbah={(shift) => setData((d) => ({ ...d, shift }))} /></div>
             )}
           </div>
 
@@ -495,13 +504,13 @@ export default function LemburMassal({ kecil = false }) {
                       <Avatar nama={k.nama} kunci={k.id} kecil />
                       <span className="t">
                         <b>{k.nama}</b>
-                        <span>{k.nik} · {k.departemen}</span>
+                        <span>{k.nik} · {k.departemen}{k.grup && data?.shift ? ` · Grup ${k.grup} (${data.shift.grup[k.grup]?.nama || '-'})` : ''}</span>
                         {c && <span className={`badge ${c.skor >= 0.9 ? 'b-ok' : 'b-warn'}`} title={`Baris SPL: ${c.baris}`}>{c.alasan}</span>}
                       </span>
                       <span className="v">
                         {k.sudahTap
                           ? <span className="badge b-mute">Sudah tap {k.sudahTap.jam}</span>
-                          : admin && k.upahSejam != null && hUmum ? <span className="num">{rp(Math.round(hUmum.jamHitung * k.upahSejam))}</span> : null}
+                          : admin && k.upahSejam != null && hitung(f.mulai, f.jam, k.grup) ? <span className="num">{rp(Math.round(hitung(f.mulai, f.jam, k.grup).jamHitung * k.upahSejam))}</span> : null}
                       </span>
                     </label>
                   );

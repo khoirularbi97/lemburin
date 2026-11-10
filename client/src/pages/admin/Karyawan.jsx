@@ -37,10 +37,10 @@ function SandiAwal({ data, onClose }) {
   );
 }
 
-const KOSONG = { nama: '', nik: '', departemen: '', jabatan: 'Operator', upahBulanan: '' };
+const KOSONG = { nama: '', nik: '', departemen: '', jabatan: 'Operator', upahBulanan: '', grup: '' };
 
-function FormKaryawan({ awal, departemen, onBatal, onSimpan }) {
-  const [f, setF] = useState(awal ? { ...awal } : { ...KOSONG, departemen: departemen[0] || '' });
+function FormKaryawan({ awal, departemen, grupShift, onBatal, onSimpan }) {
+  const [f, setF] = useState(awal ? { ...awal, grup: awal.grup || '' } : { ...KOSONG, departemen: departemen[0] || '' });
   const [error, setError] = useState('');
   const [proses, setProses] = useState(false);
   const ubah = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -50,7 +50,7 @@ function FormKaryawan({ awal, departemen, onBatal, onSimpan }) {
     setError('');
     setProses(true);
     try {
-      await onSimpan({ ...f, upahBulanan: Number(String(f.upahBulanan).replace(/\D/g, '')) });
+      await onSimpan({ ...f, grup: f.grup || null, upahBulanan: Number(String(f.upahBulanan).replace(/\D/g, '')) });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -70,6 +70,15 @@ function FormKaryawan({ awal, departemen, onBatal, onSimpan }) {
         </select>
       </div>
       <div className="fld"><label htmlFor="k-jab">Jabatan</label><input className="input" id="k-jab" value={f.jabatan} onChange={ubah('jabatan')} /></div>
+      {(grupShift || f.grup) && (
+        <div className="fld">
+          <label htmlFor="k-grup">Grup shift</label>
+          <select className="input" id="k-grup" value={f.grup} onChange={ubah('grup')}>
+            <option value="">Non-shift (jam kerja normal)</option>
+            {[...new Set([...(grupShift || []), ...(f.grup ? [f.grup] : [])])].map((g) => <option key={g} value={g}>Grup {g}</option>)}
+          </select>
+        </div>
+      )}
       <div className="fld"><label htmlFor="k-upah">Upah sebulan (Rp)</label><input className="input num" id="k-upah" inputMode="numeric" value={f.upahBulanan} onChange={ubah('upahBulanan')} required placeholder="5000000" /></div>
       <div className="full">
         {error && <p className="err" role="alert" style={{ flexBasis: '100%' }}>{error}</p>}
@@ -133,6 +142,7 @@ export default function Karyawan() {
   const toast = useToast();
   const [list, setList] = useState(null);
   const [departemen, setDepartemen] = useState([]);
+  const [grupShift, setGrupShift] = useState(null);
   const [cari, setCari] = useState('');
   const [form, setForm] = useState(null); // null | 'baru' | objek karyawan
   const [kartu, setKartu] = useState(null);
@@ -146,6 +156,7 @@ export default function Karyawan() {
   useEffect(() => {
     muat();
     api('/api/karyawan/departemen').then(setDepartemen).catch(() => {});
+    api('/api/mandiri/aturan').then((r) => setGrupShift(r.aturan?.shift?.aktif ? r.aturan.shift.grup : null)).catch(() => {});
   }, [muat]);
 
   const tampil = useMemo(() => {
@@ -181,7 +192,7 @@ export default function Karyawan() {
         <div className="acts"><button type="button" className="btn" onClick={() => setForm('baru')}><Icon name="plus" size={18} />Tambah karyawan</button></div>
       </div>
 
-      {form && <FormKaryawan key={form === 'baru' ? 'baru' : form.id} awal={form === 'baru' ? null : form} departemen={departemen} onBatal={() => setForm(null)} onSimpan={simpan} />}
+      {form && <FormKaryawan key={form === 'baru' ? 'baru' : form.id} awal={form === 'baru' ? null : form} departemen={departemen} grupShift={grupShift} onBatal={() => setForm(null)} onSimpan={simpan} />}
 
       <div className="fld" style={{ maxWidth: 420 }}>
         <label htmlFor="cari">Cari karyawan</label>
@@ -198,7 +209,7 @@ export default function Karyawan() {
                   <tr key={k.id}>
                     <td><span className="namecell"><Avatar nama={k.nama} kunci={k.id} kecil />{k.nama}</span></td>
                     <td className="num">{k.nik}</td>
-                    <td>{k.departemen}</td>
+                    <td>{k.departemen}{k.grup && <> <span className="badge b-ink" title="Grup shift">Grup {k.grup}</span></>}</td>
                     <td className="n">{angka(k.upahBulanan)}</td>
                     <td className="n">{angka(k.upahSejam)}</td>
                     <td>

@@ -39,8 +39,8 @@ function terapkan(r, data) {
 }
 
 export function buatFakePrisma() {
-  const db = { user: [], karyawan: [], lembur: [], pengajuanTap: [], hariLibur: [], langgananPush: [], tapDitolak: [], notifikasi: [], spl: [], pemakaianOcr: [], sesiLembur: [], wajahKaryawan: [], pengaturan: [], qrTokenLama: [] };
-  const id = { user: 0, karyawan: 0, lembur: 0, pengajuanTap: 0, langgananPush: 0, tapDitolak: 0, notifikasi: 0, spl: 0, pemakaianOcr: 0, sesiLembur: 0, wajahKaryawan: 0, pengaturan: 0, qrTokenLama: 0 };
+  const db = { user: [], karyawan: [], lembur: [], pengajuanTap: [], hariLibur: [], langgananPush: [], tapDitolak: [], notifikasi: [], spl: [], pemakaianOcr: [], sesiLembur: [], wajahKaryawan: [], pengaturan: [], qrTokenLama: [], hariShift: [] };
+  const id = { user: 0, karyawan: 0, lembur: 0, pengajuanTap: 0, langgananPush: 0, tapDitolak: 0, notifikasi: 0, spl: 0, pemakaianOcr: 0, sesiLembur: 0, wajahKaryawan: 0, pengaturan: 0, qrTokenLama: 0, hariShift: 0 };
 
   function sertakan(tabel, baris, include) {
     if (!baris || !include) return baris;
@@ -140,6 +140,7 @@ export function buatFakePrisma() {
     wajahKaryawan: model('wajahKaryawan'),
     pengaturan: model('pengaturan'),
     qrTokenLama: model('qrTokenLama'),
+    hariShift: model('hariShift'),
     tapDitolak: model('tapDitolak'),
     async $queryRaw(strings, ...nilai) {
       const sql = strings.join('?');

@@ -15,6 +15,7 @@ import portalRoutes from './routes/portal.js';
 import pengajuanRoutes from './routes/pengajuan.js';
 import massalRoutes from './routes/massal.js';
 import mandiriAdminRoutes from './routes/mandiriAdmin.js';
+import shiftRoutes from './routes/shift.js';
 
 export function buatApp() {
   const app = express();
@@ -55,6 +56,7 @@ export function buatApp() {
   app.use('/api/pengajuan', wajibLogin, wajibPeran('ADMIN'), pengajuanRoutes);
   app.use('/api/lembur-massal', wajibLogin, wajibPeran('ADMIN', 'PETUGAS'), massalRoutes);
   app.use('/api/mandiri', wajibLogin, wajibPeran('ADMIN'), mandiriAdminRoutes);
+  app.use('/api/shift', wajibLogin, wajibPeran('ADMIN', 'PETUGAS'), shiftRoutes);
   // Portal karyawan memakai token jenis KARYAWAN (lihat middleware/auth.js)
   app.use('/api/portal', portalRoutes);
 

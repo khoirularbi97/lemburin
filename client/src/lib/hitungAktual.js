@@ -9,13 +9,29 @@ const ATURAN = { jamHariKerja: 5.5, jamHariLibur: 14, pembagi: 173 };
 //     pola 5 hari kerja : jam 1–8 2x, jam 9 3x, jam 10–12 4x
 //     pola 6 hari kerja : jam 1–7 2x, jam 8 3x, jam 9–11 4x
 //     pola 6, libur resmi jatuh di hari kerja terpendek: jam 1–5 2x, jam 6 3x, jam 7–9 4x
+export const SHIFT_BAWAAN = Object.freeze({
+  aktif: false,
+  // Scan / tap sebelum jam ini dihitung untuk hari kerja sebelumnya (lembur shift 2 lewat tengah malam)
+  gantiHari: '07:00',
+  shift1: Object.freeze({ masuk: '07:00', pulang: '16:00' }),
+  // Shift 2 normal kalau shift 1 tidak lembur
+  shift2: Object.freeze({ masuk: '16:00', pulang: '00:00' }),
+  // Shift 2 kalau shift 1 lembur (ditandai per tanggal oleh petugas/admin)
+  shift2Lembur: Object.freeze({ masuk: '19:30', pulang: '03:30' }),
+  // Rotasi mingguan per grup: pada minggu acuan (Senin acuanSenin), grupShift1 masuk shift 1
+  acuanSenin: '2026-11-09',
+  grupShift1: 'A',
+  grup: Object.freeze(['A', 'B']),
+});
+
 export const ATURAN_AKTUAL_BAWAAN = Object.freeze({
   polaKerja: 5, // 5 = Senin–Jumat, 6 = Senin–Sabtu
   hariTerpendek: 6, // untuk pola 6: hari kerja terpendek (0=Minggu..6=Sabtu), biasanya Sabtu
-  jamPulang: '16:30', // jam pulang normal hari kerja; lembur hari kerja dihitung mulai jam ini
+  jamPulang: '16:30', // jam pulang normal hari kerja (karyawan non-shift); lembur hari kerja dihitung mulai jam ini
   jamPulangTerpendek: '13:30', // jam pulang di hari kerja terpendek (pola 6)
   istirahat: [{ mulai: '12:00', selesai: '13:00' }], // jam istirahat yang tidak dihitung lembur
   pembulatanMenit: 30, // menit lembur dibulatkan ke bawah ke kelipatan ini (1 = per menit)
+  shift: SHIFT_BAWAAN,
 });
 
 const TARIF_LIBUR = {
@@ -27,59 +43,130 @@ const TARIF_LIBUR = {
 const keMenit = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
 const keJam = (menit) => { const m = ((menit % 1440) + 1440) % 1440; return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
 export const polaJam = (s) => typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+const tambahHari = (tanggal, n) => { const d = new Date(`${tanggal}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
-/** Menit tumpang-tindih rentang [a,b) dengan jam istirahat (berulang tiap hari, aman untuk lembur lewat tengah malam). */
+/** Gabungkan aturan dengan bawaan (termasuk bagian shift). */
+export function lengkapiAturan(aturan) {
+  const a = { ...ATURAN_AKTUAL_BAWAAN, ...(aturan || {}) };
+  a.shift = { ...SHIFT_BAWAAN, ...(aturan?.shift || {}) };
+  return a;
+}
+
+/** Jam pergantian hari kerja (menit). Tanpa fitur shift = tengah malam. */
+export function menitGantiHari(aturan) {
+  const s = lengkapiAturan(aturan).shift;
+  return s.aktif && polaJam(s.gantiHari) ? keMenit(s.gantiHari) : 0;
+}
+
+/**
+ * Tanggal hari kerja untuk waktu tap (WIB). Tap sebelum jam ganti hari (mis. 02:00) dihitung untuk
+ * hari kerja sebelumnya, karena itu kelanjutan shift malam.
+ */
+export function tanggalKerja(tanggal, jam, aturan) {
+  return polaJam(jam) && keMenit(jam) < menitGantiHari(aturan) ? tambahHari(tanggal, -1) : tanggal;
+}
+
+/**
+ * Shift seorang karyawan pada tanggal kerja tertentu, atau null untuk karyawan non-shift.
+ * Rotasi mingguan: minggu genap dari acuanSenin → grupShift1 masuk shift 1, minggu ganjil sebaliknya.
+ * @param {{grup?: string|null, tanggal: string, aturan?: object, shift1Lembur?: boolean}} o
+ */
+export function jadwalShift({ grup, tanggal, aturan, shift1Lembur = false }) {
+  const s = lengkapiAturan(aturan).shift;
+  if (!s.aktif || !grup || !s.grup.includes(grup)) return null;
+  const hari = (t) => Math.floor(new Date(`${t}T00:00:00Z`).getTime() / 86400000);
+  // Senin dari minggu tanggal ini
+  const senin = hari(tanggal) - ((new Date(`${tanggal}T00:00:00Z`).getUTCDay() + 6) % 7);
+  const minggu = Math.floor((senin - hari(s.acuanSenin)) / 7);
+  const lain = s.grup.find((g) => g !== s.grupShift1) || s.grupShift1;
+  const grupS1 = minggu % 2 === 0 ? s.grupShift1 : lain;
+  if (grup === grupS1) return { kode: 'S1', nama: 'Shift 1', grup, ...s.shift1 };
+  return shift1Lembur
+    ? { kode: 'S2L', nama: 'Shift 2 (shift 1 lembur)', grup, ...s.shift2Lembur }
+    : { kode: 'S2', nama: 'Shift 2', grup, ...s.shift2 };
+}
+
+/** Panjang tumpang tindih [a,b) dengan jam istirahat (termasuk hari berikutnya). */
 function menitIstirahat(a, b, istirahat) {
   let total = 0;
   for (const r of istirahat || []) {
     if (!polaJam(r.mulai) || !polaJam(r.selesai)) continue;
     let s = keMenit(r.mulai); let e = keMenit(r.selesai);
     if (e <= s) e += 1440;
-    for (const geser of [0, 1440]) total += Math.max(0, Math.min(b, e + geser) - Math.max(a, s + geser));
+    for (const geser of [0, 1440, 2880]) total += Math.max(0, Math.min(b, e + geser) - Math.max(a, s + geser));
   }
   return total;
 }
 
-/** Bagi jam lembur ke tingkat tarif. Mengembalikan [{jam, kali}] dan jam hitung. */
+/** Kurangi rentang [a,b) dengan rentang jam kerja → potongan yang tersisa. */
+function kurangi(rentang, jendela) {
+  let hasil = rentang;
+  for (const [s, e] of jendela) {
+    hasil = hasil.flatMap(([a, b]) => {
+      if (e <= a || s >= b) return [[a, b]];
+      const sisa = [];
+      if (a < s) sisa.push([a, s]);
+      if (e < b) sisa.push([e, b]);
+      return sisa;
+    });
+  }
+  return hasil;
+}
+
+/**
+ * Bagi jam lembur ke tarif bertingkat.
+ * @param {number} jam  jam lembur (boleh desimal)
+ * @param {Array<[number, number]>} tarif  [[batasJam, kali], ...]; batas terakhir = sisa
+ */
 export function bagiTarif(jam, tarif) {
   const rincian = []; let sisa = jam; let jamHitung = 0;
-  tarif.forEach(([lebar, kali], i) => {
+  tarif.forEach(([batas, kali], i) => {
     const akhir = i === tarif.length - 1;
-    const pakai = akhir ? sisa : Math.min(sisa, lebar);
+    const pakai = akhir ? sisa : Math.min(sisa, batas);
     if (pakai > 0) { rincian.push({ jam: pakai, kali }); jamHitung += pakai * kali; sisa -= pakai; }
   });
   return { rincian, jamHitung: Math.round(jamHitung * 100) / 100 };
 }
 
 /**
- * Hitung lembur dari jam mulai & selesai sesuai PP 35/2021.
- * @param {object} o
- * @param {number} o.upahBulanan
- * @param {string} o.tanggal YYYY-MM-DD (tanggal mulai lembur)
- * @param {Map<string,string>} [o.libur]
- * @param {string} o.mulai HH:mm
- * @param {string} o.selesai HH:mm (lebih kecil dari mulai = lewat tengah malam)
- * @param {object} [o.aturan] lihat ATURAN_AKTUAL_BAWAAN
+ * Hitung lembur dari jam mulai & selesai sebenarnya (tap in / tap out, atau SPL dengan jam mulai).
+ * `tanggal` = tanggal hari kerja. Dengan fitur shift, jam sebelum jam ganti hari (mis. 02:00) dianggap
+ * hari berikutnya (kelanjutan shift malam). `jamKerja` = jam shift karyawan ({masuk, pulang, nama}):
+ * di hari kerja, yang dihitung lembur hanya waktu di luar jam shift. Tanpa `jamKerja` (karyawan non-shift)
+ * lembur hari kerja dihitung mulai jam pulang normal.
  */
-export function hitungLemburAktual({ upahBulanan, tanggal, libur = new Map(), mulai, selesai, aturan = ATURAN_AKTUAL_BAWAAN }) {
-  const a = { ...ATURAN_AKTUAL_BAWAAN, ...aturan };
+export function hitungLemburAktual({ upahBulanan, tanggal, libur = new Map(), mulai, selesai, aturan = ATURAN_AKTUAL_BAWAAN, jamKerja = null }) {
+  const a = lengkapiAturan(aturan);
   if (!polaJam(mulai) || !polaJam(selesai)) throw new Error('Jam mulai/selesai harus HH:mm');
   const hari = jenisHari(tanggal, libur, a);
   const d = hariDalamMinggu(tanggal);
   const terpendek = a.polaKerja === 6 && d === a.hariTerpendek;
+  const ganti = menitGantiHari(a);
   let m0 = keMenit(mulai); let m1 = keMenit(selesai);
+  if (ganti && m0 < ganti) { m0 += 1440; m1 += 1440; } // mulai setelah tengah malam = kelanjutan hari kerja ini
   if (m1 <= m0) m1 += 1440; // lewat tengah malam
   const peringatan = [];
-  // Hari kerja: lembur baru dihitung setelah jam pulang normal
-  if (hari.jenis === 'KERJA') {
+  let potongan = [[m0, m1]];
+  const shift = jamKerja && polaJam(jamKerja.masuk) && polaJam(jamKerja.pulang) ? jamKerja : null;
+  if (hari.jenis === 'KERJA' && shift) {
+    // Karyawan shift: lembur = waktu di luar jam shift (sebelum masuk atau setelah pulang)
+    const s = keMenit(shift.masuk); let e = keMenit(shift.pulang);
+    if (e <= s) e += 1440;
+    potongan = kurangi(potongan, [[s, e], [s + 1440, e + 1440]]);
+    const dalam = (m1 - m0) - potongan.reduce((t, [x, y]) => t + y - x, 0);
+    if (dalam > 0) peringatan.push(`Jam ${shift.masuk}–${shift.pulang} adalah jam kerja ${shift.nama || 'shift'}, tidak dihitung lembur.`);
+  } else if (hari.jenis === 'KERJA') {
+    // Non-shift: lembur hari kerja baru dihitung setelah jam pulang normal
     const pulang = keMenit(terpendek ? a.jamPulangTerpendek : a.jamPulang);
     if (m0 < pulang) {
       if (m1 > pulang) peringatan.push(`Lembur hari kerja dihitung mulai jam pulang ${keJam(pulang)}.`);
-      m0 = Math.min(Math.max(m0, pulang), m1);
+      potongan = [[Math.min(Math.max(m0, pulang), m1), m1]];
     }
   }
-  const kotor = m1 - m0;
-  const potong = menitIstirahat(m0, m1, a.istirahat);
+  potongan = potongan.filter(([x, y]) => y > x);
+  const awal = potongan.length ? potongan[0][0] : m1;
+  const kotor = potongan.reduce((t, [x, y]) => t + y - x, 0);
+  const potong = potongan.reduce((t, [x, y]) => t + menitIstirahat(x, y, a.istirahat), 0);
   const bersih = Math.max(0, kotor - potong);
   const bulat = Math.max(1, Number(a.pembulatanMenit) || 1);
   const menitLembur = Math.floor(bersih / bulat) * bulat;
@@ -103,7 +190,7 @@ export function hitungLemburAktual({ upahBulanan, tanggal, libur = new Map(), mu
     label: hari.label,
     keterangan: hari.keterangan,
     mulai, selesai,
-    mulaiDihitung: keJam(m0),
+    mulaiDihitung: keJam(awal),
     menitKotor: kotor,
     menitIstirahat: potong,
     menitLembur,
@@ -112,7 +199,8 @@ export function hitungLemburAktual({ upahBulanan, tanggal, libur = new Map(), mu
     jamHitung,
     upahSejam: sejam,
     nominal: Math.round(jamHitung * sejam),
-    lewatTengahMalam: keMenit(selesai) <= keMenit(mulai),
+    lewatTengahMalam: m1 >= 1440,
+    ...(shift ? { shift: { nama: shift.nama || null, masuk: shift.masuk, pulang: shift.pulang } } : {}),
     peringatan,
   };
 }

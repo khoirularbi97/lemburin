@@ -4,7 +4,7 @@ import { Avatar, Konfirmasi, Memuat, Modal, useToast } from '../../components/ui
 import Icon from '../../components/Icon.jsx';
 import { jamFmt, rp, tanggalPendek } from '../../format.js';
 import { teksLokasi } from '../../lib/lokasi.js';
-import { hitungLemburAktual } from '../../lib/hitungAktual.js';
+import { hitungLemburAktual, jadwalShift, lengkapiAturan } from '../../lib/hitungAktual.js';
 
 const HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const waktu = (iso) => new Date(iso).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -127,9 +127,36 @@ function Aturan() {
   const toast = useToast();
   const [a, setA] = useState(null);
   const [simpan, setSimpan] = useState(false);
-  useEffect(() => { api('/api/mandiri/aturan').then((r) => setA(r.aturan)).catch((e) => toast(e.message, true)); }, [toast]);
+  useEffect(() => { api('/api/mandiri/aturan').then((r) => setA(lengkapiAturan(r.aturan))).catch((e) => toast(e.message, true)); }, [toast]);
   if (!a) return <Memuat />;
   const ubah = (p) => setA((x) => ({ ...x, ...p }));
+  const sh = a.shift;
+  const ubahShift = (p) => setA((x) => ({ ...x, shift: { ...x.shift, ...p } }));
+  const jamShift = (kunci, label) => (
+    <div className="fld">
+      <label htmlFor={`sh-${kunci}`}>{label}</label>
+      <div className="jam-rentang">
+        <input id={`sh-${kunci}`} type="time" className="input" aria-label={`${label} masuk`} value={sh[kunci].masuk} onChange={(e) => ubahShift({ [kunci]: { ...sh[kunci], masuk: e.target.value } })} />
+        <span>s/d</span>
+        <input type="time" className="input" aria-label={`${label} pulang`} value={sh[kunci].pulang} onChange={(e) => ubahShift({ [kunci]: { ...sh[kunci], pulang: e.target.value } })} />
+      </div>
+    </div>
+  );
+  const hariIni = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
+  const mingguIni = sh.aktif ? sh.grup.map((g) => [g, jadwalShift({ grup: g, tanggal: hariIni, aturan: a })]) : [];
+  const contohShift = sh.aktif ? (() => {
+    const [gA, gB] = sh.grup;
+    const s1 = jadwalShift({ grup: mingguIni.find(([, j]) => j?.kode === 'S1')?.[0] || gA, tanggal: '2026-11-11', aturan: a });
+    const g2 = s1?.grup === gA ? gB : gA;
+    const s2 = jadwalShift({ grup: g2, tanggal: '2026-11-11', aturan: a });
+    const s2l = jadwalShift({ grup: g2, tanggal: '2026-11-11', aturan: a, shift1Lembur: true });
+    const h = (j, m, sl) => { try { return hitungLemburAktual({ upahBulanan: 173_000 * 30, tanggal: '2026-11-11', mulai: m, selesai: sl, aturan: a, jamKerja: j }); } catch { return null; } };
+    return [
+      [`Shift 1, lembur ${s1.pulang}–19:30`, h(s1, s1.pulang, '19:30')],
+      [`Shift 2, lembur ${s2.pulang}–03:00`, h(s2, s2.pulang, '03:00')],
+      [`Shift 2 (shift 1 lembur), lembur ${s2l.pulang}–06:30`, h(s2l, s2l.pulang, '06:30')],
+    ];
+  })() : [];
   const contoh = (tanggal, mulai, selesai, libur) => {
     try { return hitungLemburAktual({ upahBulanan: 173_000 * 30, tanggal, mulai, selesai, aturan: a, libur: libur ? new Map([[tanggal, 'Libur']]) : new Map() }); } catch { return null; }
   };
@@ -155,7 +182,7 @@ function Aturan() {
         </select>
       </div>
       <div className="fld">
-        <label htmlFor="at-pulang">Jam pulang normal hari kerja</label>
+        <label htmlFor="at-pulang">Jam pulang normal hari kerja{a.shift.aktif ? ' (karyawan non-shift)' : ''}</label>
         <input id="at-pulang" type="time" className="input" value={a.jamPulang} onChange={(e) => ubah({ jamPulang: e.target.value })} />
       </div>
       {a.polaKerja === 6 && (
@@ -193,6 +220,49 @@ function Aturan() {
         ))}
         {a.istirahat.length < 6 && <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={() => ubah({ istirahat: [...a.istirahat, { mulai: '18:00', selesai: '18:30' }] })}>+ Tambah jam istirahat</button>}
       </div>
+
+      <div className="full" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+        <label className="chk" style={{ fontWeight: 700 }}><input type="checkbox" checked={sh.aktif} onChange={(e) => ubahShift({ aktif: e.target.checked })} /> Pakai 2 shift bergilir per grup</label>
+        {!sh.aktif && <p className="hint" style={{ margin: 0 }}>Aktifkan kalau ada shift malam yang lembur lewat tengah malam. Karyawan tanpa grup tetap memakai jam pulang normal di atas.</p>}
+      </div>
+      {sh.aktif && (
+        <>
+          <div className="full sh-grid">
+          {jamShift('shift1', 'Shift 1')}
+          {jamShift('shift2', 'Shift 2 (shift 1 tidak lembur)')}
+          {jamShift('shift2Lembur', 'Shift 2 (shift 1 lembur)')}
+          <div className="fld">
+            <label htmlFor="sh-ganti">Jam ganti hari kerja</label>
+            <input id="sh-ganti" type="time" className="input" value={sh.gantiHari} onChange={(e) => ubahShift({ gantiHari: e.target.value })} />
+          </div>
+          <div className="fld">
+            <label htmlFor="sh-grup1">Nama grup</label>
+            <div className="jam-rentang">
+              {sh.grup.map((g, i) => (
+                <input key={i} id={i === 0 ? 'sh-grup1' : undefined} className="input" style={{ width: 90 }} maxLength={10} aria-label={`Nama grup ${i + 1}`} value={g}
+                  onChange={(e) => { const v = e.target.value.toUpperCase(); const grup = sh.grup.map((x, j) => (j === i ? v : x)); ubahShift({ grup, grupShift1: sh.grupShift1 === g ? v : sh.grupShift1 }); }} />
+              ))}
+            </div>
+          </div>
+          <div className="fld">
+            <label htmlFor="sh-acuan">Minggu acuan (Senin) &amp; grup shift 1-nya</label>
+            <div className="jam-rentang">
+              <input id="sh-acuan" type="date" className="input" value={sh.acuanSenin} onChange={(e) => ubahShift({ acuanSenin: e.target.value })} />
+              <select className="input"  aria-label="Grup yang masuk shift 1 pada minggu acuan" value={sh.grupShift1} onChange={(e) => ubahShift({ grupShift1: e.target.value })}>
+                {sh.grup.map((g) => <option key={g} value={g}>Grup {g}</option>)}
+              </select>
+            </div>
+          </div>
+          </div>
+          <div className="full" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+            <div className="glass kv">
+              <div><span>Minggu ini</span><b>{mingguIni.map(([g, j]) => `Grup ${g}: ${j ? j.nama : '—'}`).join(' · ')}</b></div>
+              {contohShift.map(([l, h]) => h && <div key={l}><span>{l}</span><b className="num">{jamFmt(h.jamLembur)} jam → {jamFmt(h.jamHitung)} jam hitung · {rp(h.nominal)}</b></div>)}
+            </div>
+            <p className="hint">Shift bergantian tiap minggu (Senin). Isi <b>Grup</b> di Data karyawan. Scan / tap sebelum jam ganti hari ({sh.gantiHari}) dihitung untuk hari kerja sebelumnya, jadi lembur shift 2 setelah tengah malam ikut tanggal shift itu dimulai. Petugas atau admin menandai <b>Shift 1 lembur</b> per tanggal di layar Scan / Input massal; saat itu shift 2 dihitung masuk {sh.shift2Lembur.masuk}–{sh.shift2Lembur.pulang}. Hari kerja: yang dihitung lembur hanya waktu di luar jam shift.</p>
+          </div>
+        </>
+      )}
 
       <div className="full" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
         <b style={{ fontSize: 14 }}>Tarif PP 35/2021 yang dipakai</b>
